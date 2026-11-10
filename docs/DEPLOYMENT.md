@@ -30,6 +30,28 @@ This is a single-instance, stateful deployment: one container, one SQLite file o
 
 Generate secrets with `openssl rand -hex 24`. Keep them in the panel's environment settings, never in the repository or the image.
 
+## Coolify variable mapping
+
+The app reads the plain names below. A `PULSE_` prefix is ignored (for example
+`PULSE_ACCESS_PIN` does nothing; the app reads `ACCESS_PIN`). Set these in
+Coolify's environment settings, never in the repo:
+
+| Coolify variable | Value | Notes |
+|---|---|---|
+| `PORT` | `8080` | Overrides the image default `8787`. The health check follows `PORT`. |
+| `NODE_ENV` | `production` | Fail-closed checks on, no auto-seed. |
+| `ACCESS_PIN` | four digits | Server-side only, never `VITE_`, never committed. |
+| `SESSION_SECRET` | 32+ random chars | Signs the session cookie. |
+| `ACCESS_GATE` | `on` | Optional in production (on by default); values are `on`/`off`, not `true`. |
+| `TRUST_PROXY` | `1` | Behind Coolify's reverse proxy. Values are hop count/address, not `true`. |
+| `POS_WEBHOOK_SECRET` | 24+ random chars | Required in production, even in SIMULATED mode. |
+| `UBER_ADS_TOKEN` | 24+ random chars | Required in production, even in SIMULATED mode. |
+| `DATABASE_PATH` | `/data/marginpulse.db` | Needs a persistent volume mounted at `/data`. |
+| `VITE_CLARITY_PROJECT_ID` | Clarity ID | Public, not a secret. Set it both as a build variable (so Vite bakes it into the bundle) and as a runtime variable (so the server allows Clarity domains in the CSP). Empty = analytics off. |
+| `VITE_CLARITY_ALLOW_LOCAL` | `false` | Baked in at build time; a runtime-only change has no effect until rebuilt. |
+
+There is no `PULSE_ALLOW_DEMO_RESET` setting; remove it. "Load scenario" in the app is the demo reset and only runs when a visitor presses it.
+
 ## Start-up rules (production)
 
 1. Missing or placeholder secrets: the process exits with a list of the variables to fix.
