@@ -34,5 +34,6 @@ VOLUME ["/data"]
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-# Runs the server directly (not through npm) so stop signals reach Node.
-CMD ["node", "--disable-warning=ExperimentalWarning", "--import", "tsx", "apps/api/src/server.ts"]
+# First boot seeds the volume database if empty (bootstrap is idempotent), then exec
+# replaces the shell with Node so stop signals still reach the server directly.
+CMD ["sh", "-c", "node --disable-warning=ExperimentalWarning --import tsx scripts/bootstrap.ts; exec node --disable-warning=ExperimentalWarning --import tsx apps/api/src/server.ts"]
