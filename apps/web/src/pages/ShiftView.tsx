@@ -1,0 +1,252 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, ApiError, InvestigationView, ScenarioInfo } from "../api/client";
+import { clock, copyFor, historyLine, shortClock } from "../state/format";
+import { KitchenCard, CampaignCard, ActionCard } from "../components/DecisionCards";
+import { OutcomePanel } from "../components/OutcomePanel";
+import { Inspector } from "../components/Inspector";
+import { SimulatorPanel, SimState } from "../components/SimulatorPanel";
+import { ConfirmPauseDialog, DismissDialog } from "../components/Dialogs";
+import { Stepper } from "../components/Stepper";
+import { EvidenceChecks } from "../components/EvidenceChecks";
+import { useAnalytics } from "../analytics/context";
+
+interface Props { user: string; focusId?: string | null; onSwitchUser?: (userId: string, keepInvestigation: string | null) => void; adsProvider: string; investigator: string | null }
+
+const STORE = "SYN-STORE-104";
+
+export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchUser }: Props) {
+  const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
+  const [scenarioId, setScenarioId] = useState("A");
+  const [loadedScenario, setLoadedScenario] = useState<string | null>(null);
+  const [view, setView] = useState<InvestigationView | null>(null);
+  const [sim, setSim] = useState<SimState | null>(null);
+  const [busy, setBusy] = useState<string | null>("init");
+  const currentId = useRef<string | null>(null);
+  const [announce, setAnnounce] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [dismissOpen, setDismissOpen] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  const refreshSim = useCallback(async () => {
+    const s = await api.get<SimState>("/api/sim/state");
+    setSim(s);
+    return s;
+  }, []);
+
+  const loadView = useCallback(async (id: string) => {
+    const v = await api.get<InvestigationView>(`/api/investigations/${id}`);
+    setView(v);
+    currentId.current = id;
+    return v;
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const sc = await api.get<{ scenarios: ScenarioInfo[]; current: string }>("/api/scenarios");
+      setScenarios(sc.scenarios);
+      setScenarioId(sc.current ?? "A");
+      setLoadedScenario(sc.current ?? "A");
+      const s = await refreshSim();
+      const target = focusId ?? s.latestInvestigation;
+      if (target) await loadView(target);
+    })().catch((e: Error) => setError(e.message)).finally(() => setBusy(null));
+  }, [refreshSim, loadView, focusId]);
+
+  /** Run an action, then re-read everything from the server. */
+  const act = async (label: string, fn: () => Promise<void>, done?: (v: InvestigationView | null) => string) => {
+    setBusy(label);
+    setError(null);
+    try {
+      await fn();
+      const v = currentId.current ? await loadView(currentId.current) : null;
+      await refreshSim();
+      if (done) setAnnounce(done(v));
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : (e as Error).message;
+      setError(msg);
+      setAnnounce(msg);
+      if (currentId.current) await loadView(currentId.current).catch(() => undefined);
+      await refreshSim().catch(() => undefined);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const loadScenario = () => act("load", async () => {
+    await api.post(`/api/scenarios/${scenarioId}/load`);
+    currentId.current = null;
+    setView(null);
+    setLoadedScenario(scenarioId);
+  }, () => `Scenario ${scenarioId} loaded. Simulated clock reset.`);
+
+  // V3 CH-21: event names only, no ids or values.
+  const analytics = useAnalytics();
+  const completed = useRef(new Set<string>());
+  useEffect(() => {
+    if (view && ["PAUSE_VERIFIED", "DISMISSED", "NO_ACTION", "NEEDS_REVIEW", "BLOCKED"].includes(view.status) && !completed.current.has(view.id)) {
+      completed.current.add(view.id);
+      analytics.track("scenario_completed");
+    }
+  }, [view, analytics]);
+
+  const simulateAlert = () => act("emit", async () => {
+    const r = await api.post<{ event: { eventId: string }; delivery: { status: number; body: { investigationId?: string; message?: string } } }>("/mock-pos/events", { storeId: STORE });
+    if (r.delivery.body?.investigationId) {
+      const v = await loadView(r.delivery.body.investigationId);
+      analytics.track("scenario_started");
+      setAnnounce(`Kitchen alert received. ${copyFor(v.decisionCode).title}.`);
+      headingRef.current?.focus();
+    } else throw new Error(`Webhook was not accepted (${r.delivery.status}): ${r.delivery.body?.message ?? "no detail"}`);
+  });
+
+  const approveAndPause = (acknowledged: string[]) => act("pause", async () => {
+    if (!view) return;
+    const a = await api.post<{ approvalId: string }>(`/api/investigations/${view.id}/approve`, acknowledged.length ? { acknowledgeWarnings: acknowledged } : {});
+    await api.post(`/api/investigations/${view.id}/pause-campaign`, { approvalId: a.approvalId });
+    setConfirmOpen(false);
+  }, (v) => copyFor(v?.decisionCode ?? null).title);
+
+  const retry = () => act("retry", async () => {
+    if (!view) return;
+    const ap = view.approvals[view.approvals.length - 1];
+    if (!ap) throw new Error("No approval on record");
+    await api.post(`/api/investigations/${view.id}/pause-campaign`, { approvalId: ap.approvalId });
+  }, (v) => copyFor(v?.decisionCode ?? null).title);
+
+  const checkAgain = () => act("verify", async () => { if (view) await api.post(`/api/investigations/${view.id}/verify`); }, (v) => copyFor(v?.decisionCode ?? null).title);
+
+  const dismiss = (reason: string) => act("dismiss", async () => {
+    if (!view) return;
+    await api.post(`/api/investigations/${view.id}/dismiss`, { reason });
+    setDismissOpen(false);
+  }, () => "Kept active. Nothing was changed.");
+
+  const reassess = () => act("reassess", async () => {
+    if (!view) return;
+    const r = await api.post<{ investigationId: string }>(`/api/investigations/${view.id}/reassess`);
+    await loadView(r.investigationId);
+  });
+
+  const scenario = scenarios.find((s) => s.id === (loadedScenario ?? scenarioId));
+  const selected = scenarios.find((s) => s.id === scenarioId);
+  const copy = copyFor(view?.decisionCode ?? null);
+  const tone = !view ? "idle" : view.status === "PAUSE_VERIFIED" ? "ok" : view.status === "AWAITING_APPROVAL" || view.status === "APPROVED" ? "ready" : view.status === "NO_ACTION" || view.status === "DISMISSED" ? "calm" : view.status === "BLOCKED" ? "stop" : "warn";
+
+  return (
+    <div className="shift">
+      <section className="control-strip" aria-label="Demo controls">
+        <div className="scenario-pick">
+          <label htmlFor="scenario">Scenario</label>
+          <select id="scenario" value={scenarioId} onChange={(e) => setScenarioId(e.target.value)}>
+            {scenarios.map((s) => <option key={s.id} value={s.id}>{s.id}: {s.title}</option>)}
+          </select>
+          <button className="btn quiet" onClick={loadScenario} disabled={!!busy}>{busy === "load" ? "Loading…" : "Load scenario"}</button>
+        </div>
+        <button className="btn strong" onClick={simulateAlert} disabled={!!busy}>{busy === "emit" ? "Sending alert…" : "Simulate kitchen alert"}</button>
+        <p className="sim-clock">Simulated time <strong>{clock(sim?.clock)}</strong></p>
+      </section>
+      {selected && selected.id !== loadedScenario && <p className="hint">Press <em>Load scenario</em> to reset the simulators to “{selected.title}”.</p>}
+      {scenario && (
+        <details className="scenario-note">
+          <summary>Scenario {scenario.id}: {scenario.title}</summary>
+          <p>{scenario.summary}</p>
+          <p><strong>Try:</strong> {scenario.steps.join(", then ")}. <strong>Expected:</strong> {scenario.expected}</p>
+        </details>
+      )}
+
+      <div className="sr-only" aria-live="polite" role="status">{announce}</div>
+      {error && <p className="error-line" role="alert">{error}</p>}
+
+      {!view && (
+        <section className="empty">
+          <h1>No kitchen alerts yet</h1>
+          <p>When the kitchen passes the POS alert line, the POS sends MarginPulse a signed alert. Use <strong>Simulate kitchen alert</strong> to send one from the mock POS.</p>
+        </section>
+      )}
+
+      {view && (
+        <article className="investigation" aria-labelledby="inv-title">
+          <div className="inv-head">
+            <div>
+              <h1 id="inv-title" ref={headingRef} tabIndex={-1}>
+                {view.status === "PAUSE_VERIFIED" ? "One Sponsored Listings campaign paused with your approval."
+                  : view.decision === "RECOMMEND_PAUSE" ? "Kitchen rush detected. One active Sponsored Listings campaign may be adding paid demand."
+                    : view.kitchen && view.kitchen.thresholdMinutes !== null && view.kitchen.p95PrepMinutes >= view.kitchen.thresholdMinutes ? "Kitchen rush detected." : "Kitchen alert checked."}
+              </h1>
+              <p className="inv-meta">
+                {view.store?.name ?? String(view.event.storeId)} <span aria-hidden="true">/</span> {shortClock(view.createdAt)} ET <span aria-hidden="true">/</span> Investigation {view.id}
+                {view.parentId && <> <span aria-hidden="true">/</span> re-assessment of <button className="linkish" onClick={() => loadView(view.parentId!)}>{view.parentId}</button></>}
+              </p>
+              <p className="inv-history">{historyLine(view.storeHistory)}</p>
+            </div>
+            <p className="boundary">One campaign only · Manager approval required</p>
+          </div>
+
+          <Stepper status={view.status} hadApproval={view.approvals.length > 0} />
+
+          <div className={`verdict tone-${tone}`} role="status">
+            <div>
+              <h2>{copy.title}</h2>
+              {copy.body && <p>{copy.body}</p>}
+              {view.dismissReason && <p>Reason: “{view.dismissReason}”</p>}
+            </div>
+            <p className="verdict-code"><span className="sr-only">Decision code </span>{view.decisionCode ?? view.status}</p>
+          </div>
+
+          <EvidenceChecks matrix={view.evidenceMatrix} />
+
+          {view.viewer && !view.viewer.canApproveHere && (view.actions.canApprove || view.actions.canPause || view.actions.canRetry) && (
+            <div className="role-banner" role="note">
+              <p>
+                <strong>Only a manager for {view.store?.name ?? "this store"} can approve this pause.</strong> You are viewing as {view.viewer.displayName}.
+              </p>
+              {view.eligibleApprovers.length > 0 && onSwitchUser ? (
+                <div className="btn-row">
+                  {view.eligibleApprovers.map((e) => (
+                    <button key={e.userId} className="btn quiet small" onClick={() => onSwitchUser(e.userId, view.id)}>Demo: switch to {e.displayName}</button>
+                  ))}
+                </div>
+              ) : <p className="muted">No demo manager is assigned to this store.</p>}
+              <p className="muted small">The identity switcher is a demo convenience, not sign-in. The server checks every approval.</p>
+            </div>
+          )}
+
+          {view.warnings.map((w) => (
+            <div key={w.code} className="repeat-warning" role="note" aria-labelledby={`warn-${w.code}`}>
+              <h2 id={`warn-${w.code}`}>Possible repeat alert</h2>
+              <p>
+                Investigation <button className="linkish" onClick={() => loadView(w.priorInvestigationId)}>{w.priorInvestigationId}</button> was opened{" "}
+                {w.secondsApart !== null && w.secondsApart < 60 ? "moments" : `${Math.round((w.secondsApart ?? 0) / 60)} min`} earlier for the same kitchen snapshot ({w.snapshotId}, P95 {w.p95} min).
+              </p>
+              <p className="muted">This may be the POS resending one alert under a new id, or a real second alert. Either can happen; nothing has been decided. A manager must confirm before approving.</p>
+            </div>
+          ))}
+
+          {view.kitchen || view.campaign ? (
+            <div className="cards">
+              <KitchenCard v={view} />
+              <CampaignCard v={view} />
+              <ActionCard v={view} busy={busy} canApprove={!view.viewer || view.viewer.canApproveHere} onPause={() => setConfirmOpen(true)} onKeep={() => setDismissOpen(true)} onRetry={retry} onCheck={checkAgain} onReassess={reassess} onOpenChild={(id) => loadView(id)} />
+            </div>
+          ) : (
+            <div className="cards-missing">
+              <p>No kitchen or campaign evidence could be read for this alert.</p>
+              {view.actions.canReassess && <button className="btn quiet" onClick={reassess}>Re-assess with fresh data</button>}
+            </div>
+          )}
+
+          <OutcomePanel v={view} />
+          <Inspector v={view} adsProvider={adsProvider} investigator={investigator} />
+        </article>
+      )}
+
+      <SimulatorPanel sim={sim} invId={view?.id ?? null} eventId={view?.event.eventId ?? null} storeId={STORE}
+        onChanged={async (msg) => { if (currentId.current) await loadView(currentId.current); const s = await refreshSim(); if (msg) setAnnounce(msg); return s; }}
+        onOpenInvestigation={(id) => loadView(id)} />
+
+      {view && <ConfirmPauseDialog open={confirmOpen} v={view} busy={busy === "pause"} onConfirm={approveAndPause} onCancel={() => setConfirmOpen(false)} />}
+      {view && <DismissDialog open={dismissOpen} busy={busy === "dismiss"} onConfirm={dismiss} onCancel={() => setDismissOpen(false)} />}
+    </div>
+  );
+}

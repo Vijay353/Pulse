@@ -1,0 +1,41 @@
+import { chromium } from "@playwright/test";
+const out = process.argv[2];
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1440, height: 1000 } });
+const errors = [];
+p.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+await p.goto("http://127.0.0.1:8787/");
+await p.getByRole("button", { name: "Load scenario" }).click();
+await p.waitForTimeout(300);
+await p.screenshot({ path: `${out}/0-empty.png` });
+await p.getByRole("button", { name: "Simulate kitchen alert" }).click();
+await p.getByRole("heading", { name: /Kitchen rush detected/ }).waitFor();
+await p.screenshot({ path: `${out}/1-recommend.png`, fullPage: true });
+await p.getByRole("button", { name: "Pause campaign" }).click();
+await p.screenshot({ path: `${out}/2-confirm.png` });
+await p.getByRole("dialog").getByRole("button", { name: "Pause campaign" }).click();
+await p.getByRole("heading", { name: "Campaign paused and verified", level: 2 }).first().waitFor();
+await p.screenshot({ path: `${out}/3-verified.png`, fullPage: true });
+await p.setViewportSize({ width: 390, height: 900 });
+await p.screenshot({ path: `${out}/4-mobile.png`, fullPage: true });
+console.log("console errors:", errors);
+await b.close();
+// Extra views: inspector open, blocked scenario, data studio with a rejected file.
+{
+  const b2 = await chromium.launch();
+  const q = await b2.newPage({ viewport: { width: 1440, height: 1000 } });
+  await q.goto("http://127.0.0.1:8787/");
+  await q.getByLabel("Scenario").selectOption("D");
+  await q.getByRole("button", { name: "Load scenario" }).click();
+  await q.getByRole("button", { name: "Simulate kitchen alert" }).click();
+  await q.getByRole("heading", { name: /Needs review/ }).waitFor();
+  await q.getByText("Technical evidence").click();
+  await q.screenshot({ path: `${out}/5-review-inspector.png`, fullPage: true });
+  await q.getByRole("button", { name: "Data studio" }).click();
+  await q.locator('input[type=file]').setInputFiles("data/templates/invalid/orphan-reference.xlsx");
+  await q.getByLabel(/Replace/).check();
+  await q.getByRole("button", { name: "Check file" }).click();
+  await q.getByText("Problems to fix").waitFor();
+  await q.screenshot({ path: `${out}/6-data-studio.png`, fullPage: true });
+  await b2.close();
+}

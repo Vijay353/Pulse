@@ -1,0 +1,2 @@
+campaign_id,account_id,name,product,configured_status,store_ids,permissions,budget_unit,daily_budget_usd,version
+cmp-syn-4081,SYN-AD-221,Downtown Sponsored Listing,SPONSORED_LISTING,CAMPAIGN_CONFIGURED_STATUS_ACTIVE,UE-SYN-104,READ,BUDGET_UNIT_DAILY,40,12

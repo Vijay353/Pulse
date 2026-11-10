@@ -1,0 +1,15 @@
+# Keep secrets, databases and local build output out of the build context.
+node_modules
+.git
+.env
+.env.*
+!.env.example
+data/*.db
+data/*.db-*
+data/backups
+apps/web/dist
+test-results
+playwright-report
+*.zip
+*.bundle
+docs/screenshots

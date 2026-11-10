@@ -1,0 +1,56 @@
+{
+  "name": "marginpulse",
+  "version": "0.1.0",
+  "description": "MarginPulse \u2014 rush-aware Sponsored Listings control (synthetic portfolio prototype)",
+  "scripts": {
+    "start": "npm run build:web && npm run serve",
+    "serve": "node --disable-warning=ExperimentalWarning --import tsx apps/api/src/server.ts",
+    "dev": "node scripts/dev.mjs",
+    "build:web": "vite build",
+    "build": "npm run typecheck && npm run build:web",
+    "reset": "node --disable-warning=ExperimentalWarning --import tsx scripts/reset.ts",
+    "bootstrap": "node --disable-warning=ExperimentalWarning --import tsx scripts/bootstrap.ts",
+    "backup": "node --disable-warning=ExperimentalWarning --import tsx scripts/backup.ts",
+    "template": "node --disable-warning=ExperimentalWarning --import tsx scripts/generate-workbooks.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:e2e": "npm run build:web && playwright test",
+    "test:all": "npm run typecheck && npm run lint && npm test && npm run test:e2e && npm run scan:secrets",
+    "scan:secrets": "node --import tsx scripts/secret-scan.ts"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "@fontsource/barlow-semi-condensed": "^5.3.0",
+    "@fontsource/public-sans": "^5.3.0",
+    "exceljs": "^4.4.0",
+    "fastify": "^5.12.7",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}
