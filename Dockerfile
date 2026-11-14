@@ -12,6 +12,9 @@ COPY . .
 # Optional, public (not a secret): Clarity project ID baked into the UI bundle (V3 CH-21). Empty = analytics off.
 ARG VITE_CLARITY_PROJECT_ID=""
 ENV VITE_CLARITY_PROJECT_ID=${VITE_CLARITY_PROJECT_ID}
+# VITE_CLARITY_ALLOW_LOCAL must also be declared here or a build variable for it is silently ignored.
+ARG VITE_CLARITY_ALLOW_LOCAL=""
+ENV VITE_CLARITY_ALLOW_LOCAL=${VITE_CLARITY_ALLOW_LOCAL}
 # Typecheck + Vite build, using the repo's own script.
 RUN npm run build
 

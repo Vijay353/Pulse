@@ -52,6 +52,35 @@ Coolify's environment settings, never in the repo:
 
 There is no `PULSE_ALLOW_DEMO_RESET` setting; remove it. "Load scenario" in the app is the demo reset and only runs when a visitor presses it.
 
+## Clarity shows no data — checklist
+
+The loader is consent-gated by design (CH-21): nothing is fetched and nothing
+is sent until a visitor clicks **Allow** in the footer notice. If the dashboard
+stays empty, work through this list in order:
+
+1. **Rebuilt with the build variable?** `VITE_CLARITY_PROJECT_ID` is baked into
+   the JS bundle at build time. Setting it only as a runtime variable does
+   nothing until you rebuild and redeploy. Set it as a build variable too.
+2. **Runtime variable set?** The server only allows Clarity's domains in the
+   Content-Security-Policy when the same variable is set at runtime.
+   `GET /api/health` now reports `clarity: { configured: true/false }` for this.
+   If health says `true` but the footer shows no analytics notice, the bundle
+   was built without the ID: go back to step 1.
+3. **Consent given?** Log in through the gate, then click **Allow** in the
+   footer. Check `localStorage.mp_analytics_consent === "granted"`. Declining
+   keeps everything off; "Turn off" withdraws and clears Clarity cookies.
+4. **Right environment?** Nothing runs on the gate page itself, on
+   `localhost`/`127.0.0.1` (unless the build has
+   `VITE_CLARITY_ALLOW_LOCAL=true`), or under automation
+   (`navigator.webdriver`). Test on the public `https://` URL in a normal browser.
+5. **Blockers?** Ad/tracking blockers commonly block `clarity.ms`. Retest with
+   extensions off.
+6. **Expectations:** by design only four event names are ever sent
+   (`project_entered`, `scenario_started`, `scenario_completed`,
+   `audit_export_clicked`), with no values, tags, or user ids, and everything
+   inside `<main>` is masked in recordings. Clarity will show sessions and
+   heatmaps, never per-user identities or app content.
+
 ## Start-up rules (production)
 
 1. Missing or placeholder secrets: the process exits with a list of the variables to fix.

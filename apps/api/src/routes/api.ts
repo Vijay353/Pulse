@@ -74,6 +74,10 @@ export function registerApiRoutes(app: FastifyInstance, d: ApiDeps) {
     clock: clock.nowIso(),
     scenario: kvGet(db, "scenario"),
     accessGate: d.config.access.gate,
+    // V3 CH-21: runtime half of the Clarity setup. The UI bundle also needs the
+    // same project ID baked in at build time; if configured is true here but the
+    // footer shows no analytics notice, rebuild with the build variable set.
+    clarity: { configured: d.config.clarityProjectId !== null },
   }));
 
   app.get("/api/session", async (req, reply) => {
