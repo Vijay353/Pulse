@@ -1,5 +1,5 @@
 # CH-3: the same gates used locally, on every push and pull request.
-# Status: CONFIGURED. Written in an environment without GitHub Actions; the first run happens on GitHub.
+# Status: first GitHub run failed on ubuntu-latest (26.04, unsupported by Playwright); runner pinned to 24.04.
 name: ci
 on:
   push:
@@ -9,7 +9,9 @@ permissions:
   contents: read
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56 does not support the newer ubuntu-latest image (26.04).
+    # Bump this together with @playwright/test, not independently.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
