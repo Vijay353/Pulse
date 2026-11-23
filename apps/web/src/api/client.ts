@@ -133,6 +133,7 @@ export interface InvestigationView {
   policyProvenance: { policyId: string; version: string; effectiveFrom: string; checkCount: number; changedBy: string | null; changedAt: string | null; changeSource: "POLICY_PUBLISHED" | "IMPORT" | null } | null;
   viewer: { userId: string; displayName: string; role: string; canApproveHere: boolean } | null;
   adsProvider: string;
+  posProvider?: string;
   audit: AuditEvent[];
 }
 

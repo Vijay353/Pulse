@@ -6,8 +6,9 @@
 export type Tone = "ok" | "live" | "warn" | "unknown";
 export interface Badge { source: string; text: string; tone: Tone }
 
-export function adsBadge(live: { configuredStatus: string; serving: string } | null, readError: string | null): Badge {
-  const source = "Uber Ads, live read";
+/** CH-6: when the provider is the local simulator the source says so ("Mock ..."). */
+export function adsBadge(live: { configuredStatus: string; serving: string } | null, readError: string | null, simulated = false): Badge {
+  const source = `${simulated ? "Mock " : ""}Uber Ads, live read`;
   if (!live) return { source, text: readError ? "Unknown (read failed)" : "Unknown", tone: "unknown" };
   const paused = live.configuredStatus === "CAMPAIGN_CONFIGURED_STATUS_PAUSED";
   const active = live.configuredStatus === "CAMPAIGN_CONFIGURED_STATUS_ACTIVE";
@@ -17,8 +18,8 @@ export function adsBadge(live: { configuredStatus: string; serving: string } | n
   return { source, text: "Other status", tone: "unknown" };
 }
 
-export function posBadge(health: string | null | undefined): Badge {
-  const source = "POS connector, at decision";
+export function posBadge(health: string | null | undefined, simulated = false): Badge {
+  const source = `${simulated ? "Mock " : ""}POS connector, at decision`;
   switch (health) {
     case "HEALTHY": return { source, text: "Healthy", tone: "ok" };
     case "DEGRADED": return { source, text: "Degraded", tone: "warn" };
@@ -26,3 +27,6 @@ export function posBadge(health: string | null | undefined): Badge {
     default: return { source, text: "Unknown", tone: "unknown" };
   }
 }
+
+/** CH-6: provider labels from the server start with "Mock" for the local simulators. */
+export const isSimulatedProvider = (label: string | null | undefined) => !!label && /^mock\b/i.test(label.trim());

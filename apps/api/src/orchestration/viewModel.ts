@@ -152,6 +152,7 @@ export async function buildInvestigationView(db: Db, clock: Clock, ads: UberAdsP
     policyProvenance,
     evidenceMatrix,
     adsProvider: ads.label,
+    posProvider: pos.label,
     audit: auditFor(db, id),
   };
 }

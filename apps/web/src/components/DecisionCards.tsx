@@ -1,7 +1,7 @@
 import type { InvestigationView } from "../api/client";
 import { CompareBar } from "./CompareBar";
 import { SourceBadge } from "./SourceBadge";
-import { adsBadge, posBadge } from "../state/badges";
+import { adsBadge, isSimulatedProvider, posBadge } from "../state/badges";
 import { age, clock, pct, provenanceLine, shortClock, statusWord, usd } from "../state/format";
 
 /** The memorable element: a ticket-time rail showing P95 against the merchant's limit. */
@@ -39,7 +39,7 @@ export function KitchenCard({ v }: { v: InvestigationView }) {
           <dl className="facts">
             <div><dt>Your limit</dt><dd>{k.thresholdMinutes === null ? "n/a" : `${k.thresholdMinutes} min`}</dd></div>
             <div><dt>Active tickets</dt><dd>{k.activeTickets}</dd></div>
-            <div><dt>Connector</dt><dd><SourceBadge badge={posBadge(k.connectorHealth)} /></dd></div>
+            <div><dt>Connector</dt><dd><SourceBadge badge={posBadge(k.connectorHealth, isSimulatedProvider(v.posProvider))} /></dd></div>
             <div><dt>Captured</dt><dd>{clock(k.capturedAt)}</dd></div>
           </dl>
         </>
@@ -62,10 +62,10 @@ export function CampaignCard({ v }: { v: InvestigationView }) {
         </>
       ) : (
         <>
-          <p className="card-source">Sponsored Listing, report through {v.report ? shortClock(v.report.watermark) : "n/a (no report)"}{v.report?.ageSecondsAtDecision != null ? ` (${age(v.report.ageSecondsAtDecision)} old)` : ""}</p>
+          <p className="card-source">{isSimulatedProvider(v.adsProvider) ? "Mock Uber Ads Sponsored Listing" : "Sponsored Listing"}, report through {v.report ? shortClock(v.report.watermark) : "n/a (no report)"}{v.report?.ageSecondsAtDecision != null ? ` (${age(v.report.ageSecondsAtDecision)} old)` : ""}</p>
           <p className="camp-name"><bdi>{c.name}</bdi></p>
           <p className="camp-state">
-            <SourceBadge badge={adsBadge(live, v.liveCampaignError)} />
+            <SourceBadge badge={adsBadge(live, v.liveCampaignError, isSimulatedProvider(v.adsProvider))} />
             <span className="muted"> v{live?.version ?? c.version}</span>
           </p>
           {ctr && ctr.ok ? (
