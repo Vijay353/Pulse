@@ -26,7 +26,7 @@
 5. **Durability and ops** — no backups, migrations framework, metrics, alerting or retention policy for audit data; audit hash chain is tamper-evident only within the DB.
 6. **Reset semantics** — demo reset drops all tables including the audit log; production must never offer this.
 7. **Resume** — intentionally absent; production would need a separate, authorized resume workflow and reminders.
-8. **Accessibility validation** — contrast chosen for AA but not measured; no screen-reader or 200 % zoom pass.
+8. **Accessibility validation** — automated axe scans (WCAG 2.0/2.1/2.2 A+AA) and measured contrast pairs pass (see the pitch-ready register below); no manual screen-reader session with real assistive-technology users yet.
 9. **Value claims** — no evidence of user value yet; discovery plan in the spec has not been run.
 10. **XLSX parsing** — limits are applied after parsing; a hardened service would cap decompressed size first.
 
@@ -76,3 +76,60 @@ Statuses: NOT_STARTED, IN_PROGRESS, PASSED, BLOCKED, DEFERRED.
 - **CH-4 (multi-part allocations and exact undo), DEFERRED.** The single binding write changes one field (`configured_status`) on one campaign; there are no lines, quantities or amounts to allocate. Undo (resume) is out of scope by the original spec (section 3.3 and Example L), and Uber's external API offers no automatic resume. Minimal alternative already in place: the simulator change log records before and after values and versions for every applied change, so a future, separately authorized resume could compensate from it.
 - **CH-5 (approval SLA escalation), DEFERRED.** Escalation needs a higher authority to route to; MarginPulse has one approving role (`MANAGER`, scoped per store, enforced by a CHECK constraint on `mp_users.role`). Approvals expire after `approval_ttl_s` (300 s) and recommendations after `recommendation_ttl_s` (600 s), measured on the scenario clock; a 72-hour SLA has no meaning during a kitchen rush. Minimal alternative already in place: a stale recommendation is blocked (`BLOCKED_RECOMMENDATION_EXPIRED`) and must be re-assessed, and nothing ever auto-approves.
 - **CH-9 (bulk approvals), DEFERRED.** The original MarginPulse spec (section 21, non-goals) excludes multi-store bulk actions, and the workflow produces at most one pause recommendation per kitchen alert, reviewed in a single-investigation view. There is no queue of approvable items to select from. Minimal alternative: none needed; each approval stays an individual, store-scoped action.
+
+## Pitch-ready change register
+
+Changes made under the "MarginPulse — Product Clarity, SaaS Readiness & Investor-Grade Demo" specification plus the senior-usability brief. Branch `improve/pitch-ready-ux`, baseline tag `pitch-baseline` (`067a907`). Spec CH numbers are that document's numbers, not the V3 ones above. Rollback for any row is `git revert <sha>`; reverting newest first is always safe.
+
+| ID | Status | Git SHA | Test evidence | Migration | Demo effect | Rollback note |
+|---|---|---|---|---|---|---|
+| CH-1 Scenario O coverage | PASSED | `793a774` | `integration/scenarios` (+1: forced approval refused, 0 PATCH) | none | none | revert |
+| CH-2 Per-campaign PATCH count | PASSED (already done in V3 CH-1) | n/a | existing `ports` and `vertical-slice` tests | none | none | n/a |
+| CH-3 e2e in CI | CONFIGURED | `55d1a0f` | workflow written; not run (no GitHub Actions here) | none | none | delete the workflow |
+| CH-4 Demo access gate | PASSED (already done in V3 CH-20) | n/a | existing `access-gate` tests | none | none | n/a |
+| CH-5 Mutation rate limit | PASSED | `f4a1496` | `unit/rate-limit` (3), `integration/rate-limit` (40-request burst) | none | none at normal pace; 429 after 60/min | revert, or `MUTATION_RATE_LIMIT_PER_MIN=0` |
+| CH-6 Honest labeling | PASSED | `ede3984` | `unit/copy-guard` (every web file + server copy), `unit/badges` (+1) | none (view gains `posProvider`) | badges say "Mock Uber Ads", "Mock POS" | revert |
+| CH-7 Progressive disclosure | PASSED | `2ea98d7` | `e2e/pitch-ux` (above-the-fold at 1280×800 and 375×812, tiers, toggle) | none | decision block under the verdict; simulator behind *Show demo tools* | revert |
+| CH-8 Why explanations | PASSED | `2fd6aa8`, `2ea98d7` | `unit/explain` (6), `integration/explain` (A–T + verified + G) | none | reason sentence and record chips in the verdict | revert both |
+| CH-9 Shift digest | PASSED | `cdd6520`, `e95b5b4` | `integration/insights`, `e2e/pitch-ux` | none | *What happened on your shift* after a settled alert | revert both |
+| CH-10 Quiet states | PASSED | `2ea98d7` | `e2e/pitch-ux` (calm B, receipt) | none | calmer empty state; receipt first with audit hash | revert |
+| CH-11 Visual refresh | PASSED | `2ea98d7` | all e2e; contrast table below | none | 17px body, ≥14px text, ≥44px targets, 2 elevations | revert |
+| CH-12 First run | PASSED | `2ea98d7` | `e2e/pitch-ux` (once, one click, `?onboarding=0`) | none | three-step welcome in the empty state | revert |
+| CH-13 Accessibility | PASSED | `1fcdb46` | `e2e/a11y` (axe at 1280 and 375 px, blocked, calm, simulator, data studio, dialog focus) | none | focusable scroll regions; stepper contrast | revert |
+| CH-14 Evidence package | PASSED (JSON already done in V3 CH-18); printable receipt added | `2ea98d7` | `e2e/pitch-ux` (Print receipt) | none | print stylesheet + button | revert |
+| CH-15 Audit verify control | PASSED (already done in V3 CH-17) | n/a | existing tests | none | none | n/a |
+| CH-16 Deployment packaging | CONFIGURED (image), TESTED_LOCALLY (process) | `960fe4a` | production start with the README settings run as a process | none | README container command | revert |
+| CH-17 Plan tiers | PASSED | `cdd6520`, `960fe4a` | `integration/insights` (solo 403, group 200, health) | none | `PLAN` in health; fleet gated | revert |
+| CH-18 Fleet view, `?store=` | PASSED | `cdd6520`, `e95b5b4` | `integration/insights` (scope, 403 cross-store), `e2e/pitch-ux`, `e2e/pitch-mode` | none (opt-in scenario T) | store switcher for multi-store identities | revert both |
+| CH-19 Notifications | PASSED | `cdd6520` | `integration/notify` (one signed POST, NO_ACTION, failure audited, no-op when off, unsigned refused) | none | none unless configured | revert, or unset `NOTIFY_*` |
+| CH-20 Pitch mode | PASSED | `cdd6520`, `e95b5b4`, `960fe4a` | `e2e/pitch-mode` (story follows live state, metrics match `/api/metrics`, axe) | none | `DEMO_MODE=pitch` story panel | revert |
+
+### Copy review checklist (CH-6)
+
+- [x] Every web source file and server copy module passes `BANNED_CLAIM_PATTERNS` (`tests/unit/copy-guard.test.ts`, runs in `npm test`).
+- [x] Generated sentences (explainer, digest JSON) are scanned in their own tests.
+- [x] Simulator-fed badges and the campaign source line say "Mock" when the provider label is the local simulator.
+- [x] Contribution figures keep the existing exclusion note ("not accounting profit").
+- [x] The confirm-dialog projection keeps "Projection only. No records changed."
+- [x] The digest and metrics strip show counts only and say so; no money, orders or return figures.
+- [x] The audit hash is described as "tamper-evident within this database"; the evidence checksum as "a checksum, not a signature".
+
+### Contrast (CH-11, measured with the WCAG 2.x relative-luminance formula)
+
+| Pair | Colors | Ratio | Level |
+|---|---|---|---|
+| Body text on page | `#1b2024` on `#e4e9ea` | 13.4:1 | AAA |
+| Body text on card | `#1b2024` on `#ffffff` | 16.4:1 | AAA |
+| Secondary text on page | `#434c53` on `#e4e9ea` | 7.2:1 | AAA |
+| Secondary text on card | `#434c53` on `#ffffff` | 8.8:1 | AAA |
+| Secondary text on demo strip | `#434c53` on `#d3dadc` | 6.2:1 | AA |
+| Recommendation banner | `#07462b` on `#e2f3e9` | 9.5:1 | AAA |
+| Warning text | `#4d2e00` on `#fff2d6` | 11.1:1 | AAA |
+| "Stays paused" note | `#8a5100` on `#fff2d6` | 5.8:1 | AA |
+| Blocked banner | `#6f150e` on `#fdecea` | 10.3:1 | AAA |
+| Over-limit number | `#b42318` on `#ffffff` | 6.6:1 | AA |
+| Primary button | `#ffffff` on `#000000` | 21.0:1 | AAA |
+| Inactive tab | `#dfe4e6` on `#000000` | 16.4:1 | AAA |
+| Good value | `#0c7347` on `#ffffff` | 5.9:1 | AA |
+
+Zoom: the 375 px phone layout is the same CSS width as a 1280 px window at about 340 % zoom. It has no horizontal scroll (existing responsive e2e test) and keeps the primary action on screen (new e2e test). A manual browser-zoom pass and a screen-reader session with real users are still to do.
