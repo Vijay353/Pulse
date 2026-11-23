@@ -107,22 +107,27 @@ export function ActionCard({ v, busy, canApprove = true, onPause, onKeep, onRetr
   return (
     <section className="card card-action" aria-labelledby="c3">
       <h2 id="c3" className="card-q">What you can do</h2>
-      <p className="card-source policy-provenance">{provenanceLine(v.policyProvenance)}</p>
       {a.canApprove || a.canPause ? (
-        <>
-          <p className="action-title">Pause one campaign</p>
-          <p className="muted">{c?.campaignId}</p>
-          <ul className="scope">
-            <li>Stops this campaign from serving</li>
-            <li>Does not change its budget</li>
-            <li>No promotion, menu, store, order or prep-time change</li>
-          </ul>
-          <p className="persist">Stays paused until someone resumes it</p>
-          <div className="btn-row">
-            <button className="btn primary" onClick={onPause} disabled={!!busy || !canApprove}>Pause campaign</button>
-            <button className="btn quiet" onClick={onKeep} disabled={!!busy}>Keep active</button>
+        <div className="decide">
+          <div className="decide-main">
+            <p className="action-title">Pause one campaign</p>
+            <p className="muted">{c?.name ? <bdi>{c.name}</bdi> : null} {c?.campaignId}</p>
+            <div className="btn-row">
+              <button className="btn primary big" onClick={onPause} disabled={!!busy || !canApprove}>Pause campaign</button>
+              <button className="btn quiet big" onClick={onKeep} disabled={!!busy}>Keep active</button>
+            </div>
+            <p className="authority"><strong>Who decides:</strong> {v.eligibleApprovers.length ? v.eligibleApprovers.map((e) => e.displayName).join(", ") : "a manager assigned to this store"}. MarginPulse never pauses on its own.</p>
           </div>
-        </>
+          <div className="decide-scope">
+            <p className="scope-h">What a pause does</p>
+            <ul className="scope">
+              <li>Stops this campaign from serving</li>
+              <li>Does not change its budget</li>
+              <li>No promotion, menu, store, order or prep-time change</li>
+            </ul>
+            <p className="persist">Stays paused until someone resumes it</p>
+          </div>
+        </div>
       ) : v.status === "PAUSE_VERIFIED" ? (
         <>
           <p className="action-title">Done</p>
@@ -145,6 +150,7 @@ export function ActionCard({ v, busy, canApprove = true, onPause, onKeep, onRetr
           {v.childIds.map((id) => <p key={id}><button className="linkish" onClick={() => onOpenChild(id)}>Open re-assessment {id}</button></p>)}
         </>
       )}
+      <p className="card-source policy-provenance">{provenanceLine(v.policyProvenance)}</p>
     </section>
   );
 }

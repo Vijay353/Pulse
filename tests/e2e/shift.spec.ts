@@ -65,6 +65,8 @@ test("negative: campaign changed after review blocks without a PATCH", async ({ 
   await loadScenario(page, "G");
   await page.getByRole("button", { name: "Simulate kitchen alert" }).click();
   await expect(page.getByRole("heading", { name: "Recommendation ready" })).toBeVisible();
+  // CH-7: the simulator panel is a demo tool, hidden until "Show demo tools" is on.
+  await page.getByLabel("Show demo tools").check();
   await page.locator("details.simulator > summary").click();
   await page.getByRole("button", { name: "Another manager edits the campaign" }).click();
   await page.getByRole("button", { name: "Pause campaign" }).first().click();

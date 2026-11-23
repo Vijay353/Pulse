@@ -9,12 +9,17 @@ import { ConfirmPauseDialog, DismissDialog } from "../components/Dialogs";
 import { Stepper } from "../components/Stepper";
 import { EvidenceChecks } from "../components/EvidenceChecks";
 import { useAnalytics } from "../analytics/context";
+import { VerdictExplainer } from "../components/VerdictExplainer";
+import { Welcome } from "../components/Welcome";
+import { readPref, writePref } from "../state/prefs";
 
-interface Props { user: string; focusId?: string | null; onSwitchUser?: (userId: string, keepInvestigation: string | null) => void; adsProvider: string; investigator: string | null }
+interface Props { user: string; store?: string; focusId?: string | null; onSwitchUser?: (userId: string, keepInvestigation: string | null) => void; adsProvider: string; investigator: string | null }
 
-const STORE = "SYN-STORE-104";
+/** Demo default store. CH-18 lets `?store=` choose another; the server enforces store scope either way. */
+export const DEFAULT_STORE = "SYN-STORE-104";
 
-export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchUser }: Props) {
+export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchUser, store = DEFAULT_STORE }: Props) {
+  const [demoTools, setDemoTools] = useState(() => readPref("demoTools"));
   const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
   const [scenarioId, setScenarioId] = useState("A");
   const [loadedScenario, setLoadedScenario] = useState<string | null>(null);
@@ -27,6 +32,15 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [dismissOpen, setDismissOpen] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  /** Set when a new alert arrives; consumed after the heading has rendered. */
+  const focusHeading = useRef(false);
+  useEffect(() => {
+    if (!view || !focusHeading.current || !headingRef.current) return;
+    focusHeading.current = false;
+    // CH-7: bring the new alert to the top so the decision and its one action are in view without scrolling.
+    headingRef.current.focus({ preventScroll: true });
+    headingRef.current.scrollIntoView({ block: "start" });
+  }, [view]);
 
   const refreshSim = useCallback(async () => {
     const s = await api.get<SimState>("/api/sim/state");
@@ -91,12 +105,12 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
   }, [view, analytics]);
 
   const simulateAlert = () => act("emit", async () => {
-    const r = await api.post<{ event: { eventId: string }; delivery: { status: number; body: { investigationId?: string; message?: string } } }>("/mock-pos/events", { storeId: STORE });
+    const r = await api.post<{ event: { eventId: string }; delivery: { status: number; body: { investigationId?: string; message?: string } } }>("/mock-pos/events", { storeId: store });
     if (r.delivery.body?.investigationId) {
       const v = await loadView(r.delivery.body.investigationId);
       analytics.track("scenario_started");
       setAnnounce(`Kitchen alert received. ${copyFor(v.decisionCode).title}.`);
-      headingRef.current?.focus();
+      focusHeading.current = true;
     } else throw new Error(`Webhook was not accepted (${r.delivery.status}): ${r.delivery.body?.message ?? "no detail"}`);
   });
 
@@ -133,23 +147,48 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
   const copy = copyFor(view?.decisionCode ?? null);
   const tone = !view ? "idle" : view.status === "PAUSE_VERIFIED" ? "ok" : view.status === "AWAITING_APPROVAL" || view.status === "APPROVED" ? "ready" : view.status === "NO_ACTION" || view.status === "DISMISSED" ? "calm" : view.status === "BLOCKED" ? "stop" : "warn";
 
+  /** CH-8: an evidence chip opens the technical evidence and jumps to that record. */
+  const inspectorRef = useRef<HTMLDetailsElement>(null);
+  const showEvidence = (evidenceId: string) => {
+    const insp = inspectorRef.current;
+    if (insp) insp.open = true;
+    requestAnimationFrame(() => {
+      const row = document.getElementById(`ev-${evidenceId}`) as HTMLDetailsElement | null;
+      if (!row) return;
+      row.open = true;
+      row.scrollIntoView({ block: "center" });
+      row.querySelector("summary")?.focus();
+    });
+  };
+
+  const toggleDemoTools = () => { const next = !demoTools; setDemoTools(next); writePref("demoTools", next); };
+  // CH-7: a blocked or unconfirmed outcome needs its explanation, so the proof opens by itself.
+  const needsExplaining = !!view && (view.status === "BLOCKED" || view.status === "PAUSE_REQUESTED_NOT_VERIFIED");
+
   return (
     <div className="shift">
       <section className="control-strip" aria-label="Demo controls">
-        <div className="scenario-pick">
-          <label htmlFor="scenario">Scenario</label>
-          <select id="scenario" value={scenarioId} onChange={(e) => setScenarioId(e.target.value)}>
-            {scenarios.map((s) => <option key={s.id} value={s.id}>{s.id}: {s.title}</option>)}
-          </select>
-          <button className="btn quiet" onClick={loadScenario} disabled={!!busy}>{busy === "load" ? "Loading…" : "Load scenario"}</button>
+        <div className="strip-row">
+          <p className="strip-label">Demo<span className="sr-only"> controls, for trying the product with synthetic data</span></p>
+          <div className="scenario-pick">
+            <label htmlFor="scenario">Scenario</label>
+            <select id="scenario" value={scenarioId} onChange={(e) => setScenarioId(e.target.value)}>
+              {scenarios.map((s) => <option key={s.id} value={s.id}>{s.id}: {s.title}</option>)}
+            </select>
+            <button className="btn quiet" onClick={loadScenario} disabled={!!busy}>{busy === "load" ? "Loading…" : "Load scenario"}</button>
+          </div>
+          <button className="btn strong" onClick={simulateAlert} disabled={!!busy}>{busy === "emit" ? "Sending alert…" : "Simulate kitchen alert"}</button>
+          <p className="sim-clock">Simulated time <strong>{clock(sim?.clock)}</strong></p>
+          <label className="toggle">
+            <input type="checkbox" checked={demoTools} onChange={toggleDemoTools} />
+            <span>Show demo tools</span>
+          </label>
         </div>
-        <button className="btn strong" onClick={simulateAlert} disabled={!!busy}>{busy === "emit" ? "Sending alert…" : "Simulate kitchen alert"}</button>
-        <p className="sim-clock">Simulated time <strong>{clock(sim?.clock)}</strong></p>
       </section>
       {selected && selected.id !== loadedScenario && <p className="hint">Press <em>Load scenario</em> to reset the simulators to “{selected.title}”.</p>}
-      {scenario && (
+      {scenario && demoTools && (
         <details className="scenario-note">
-          <summary>Scenario {scenario.id}: {scenario.title}</summary>
+          <summary>About scenario {scenario.id}: {scenario.title}</summary>
           <p>{scenario.summary}</p>
           <p><strong>Try:</strong> {scenario.steps.join(", then ")}. <strong>Expected:</strong> {scenario.expected}</p>
         </details>
@@ -161,7 +200,9 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
       {!view && (
         <section className="empty">
           <h1>No kitchen alerts yet</h1>
-          <p>When the kitchen passes the POS alert line, the POS sends MarginPulse a signed alert. Use <strong>Simulate kitchen alert</strong> to send one from the mock POS.</p>
+          <p className="empty-lede">Nothing needs your attention. MarginPulse checks every new kitchen alert against your policy and only asks you when a decision is needed.</p>
+          <p className="muted">To try it, press <strong>Simulate kitchen alert</strong> above. The mock POS sends a signed alert, just as a real one would.</p>
+          <Welcome />
         </section>
       )}
 
@@ -178,7 +219,6 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
                 {view.store?.name ?? String(view.event.storeId)} <span aria-hidden="true">/</span> {shortClock(view.createdAt)} ET <span aria-hidden="true">/</span> Investigation {view.id}
                 {view.parentId && <> <span aria-hidden="true">/</span> re-assessment of <button className="linkish" onClick={() => loadView(view.parentId!)}>{view.parentId}</button></>}
               </p>
-              <p className="inv-history">{historyLine(view.storeHistory)}</p>
             </div>
             <p className="boundary">One campaign only · Manager approval required</p>
           </div>
@@ -186,15 +226,12 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
           <Stepper status={view.status} hadApproval={view.approvals.length > 0} />
 
           <div className={`verdict tone-${tone}`} role="status">
-            <div>
+            <div className="verdict-main">
               <h2>{copy.title}</h2>
-              {copy.body && <p>{copy.body}</p>}
-              {view.dismissReason && <p>Reason: “{view.dismissReason}”</p>}
+              <VerdictExplainer v={view} onShowEvidence={showEvidence} />
             </div>
             <p className="verdict-code"><span className="sr-only">Decision code </span>{view.decisionCode ?? view.status}</p>
           </div>
-
-          <EvidenceChecks matrix={view.evidenceMatrix} />
 
           {view.viewer && !view.viewer.canApproveHere && (view.actions.canApprove || view.actions.canPause || view.actions.canRetry) && (
             <div className="role-banner" role="note">
@@ -224,26 +261,41 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
           ))}
 
           {view.kitchen || view.campaign ? (
-            <div className="cards">
-              <KitchenCard v={view} />
-              <CampaignCard v={view} />
+            <>
+              {/* CH-10: once verified, the receipt is the answer, so it comes before the (now finished) action block. */}
+              {view.status === "PAUSE_VERIFIED" && <OutcomePanel v={view} />}
               <ActionCard v={view} busy={busy} canApprove={!view.viewer || view.viewer.canApproveHere} onPause={() => setConfirmOpen(true)} onKeep={() => setDismissOpen(true)} onRetry={retry} onCheck={checkAgain} onReassess={reassess} onOpenChild={(id) => loadView(id)} />
-            </div>
+              {view.status !== "PAUSE_VERIFIED" && <OutcomePanel v={view} />}
+              <h2 className="section-label">The evidence</h2>
+              <div className="cards">
+                <KitchenCard v={view} />
+                <CampaignCard v={view} />
+              </div>
+            </>
           ) : (
-            <div className="cards-missing">
-              <p>No kitchen or campaign evidence could be read for this alert.</p>
-              {view.actions.canReassess && <button className="btn quiet" onClick={reassess}>Re-assess with fresh data</button>}
-            </div>
+            <>
+              <div className="cards-missing">
+                <p>No kitchen or campaign evidence could be read for this alert.</p>
+                {view.actions.canReassess && <button className="btn quiet" onClick={reassess}>Re-assess with fresh data</button>}
+              </div>
+              <OutcomePanel v={view} />
+            </>
           )}
 
-          <OutcomePanel v={view} />
-          <Inspector v={view} adsProvider={adsProvider} investigator={investigator} />
+          <section className="proof" aria-labelledby="proof-h">
+            <h2 id="proof-h" className="section-label">Proof and details</h2>
+            <p className="inv-history">{historyLine(view.storeHistory)}</p>
+            <EvidenceChecks matrix={view.evidenceMatrix} defaultOpen={needsExplaining} />
+            <Inspector ref={inspectorRef} v={view} adsProvider={adsProvider} investigator={investigator} />
+          </section>
         </article>
       )}
 
-      <SimulatorPanel sim={sim} invId={view?.id ?? null} eventId={view?.event.eventId ?? null} storeId={STORE}
-        onChanged={async (msg) => { if (currentId.current) await loadView(currentId.current); const s = await refreshSim(); if (msg) setAnnounce(msg); return s; }}
-        onOpenInvestigation={(id) => loadView(id)} />
+      {demoTools && (
+        <SimulatorPanel sim={sim} invId={view?.id ?? null} eventId={view?.event.eventId ?? null} storeId={store}
+          onChanged={async (msg) => { if (currentId.current) await loadView(currentId.current); const s = await refreshSim(); if (msg) setAnnounce(msg); return s; }}
+          onOpenInvestigation={(id) => loadView(id)} />
+      )}
 
       {view && <ConfirmPauseDialog open={confirmOpen} v={view} busy={busy === "pause"} onConfirm={approveAndPause} onCancel={() => setConfirmOpen(false)} />}
       {view && <DismissDialog open={dismissOpen} busy={busy === "dismiss"} onConfirm={dismiss} onCancel={() => setDismissOpen(false)} />}

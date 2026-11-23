@@ -9,9 +9,9 @@ export function checksSummary(m: EvidenceMatrix) {
 }
 
 /** Read-only matrix of checks that actually ran (V3 CH-19). It cannot release a write; the server decides. */
-export function EvidenceChecks({ matrix }: { matrix: EvidenceMatrix }) {
+export function EvidenceChecks({ matrix, defaultOpen = false }: { matrix: EvidenceMatrix; defaultOpen?: boolean }) {
   return (
-    <details className="evidence-checks">
+    <details className="evidence-checks" open={defaultOpen || undefined}>
       <summary>{checksSummary(matrix)}</summary>
       <p className="muted small">Each row is a rule the system ran, with the records it used. "Not evaluated" means the check has not run, not that it passed.</p>
       <div className="table-wrap">

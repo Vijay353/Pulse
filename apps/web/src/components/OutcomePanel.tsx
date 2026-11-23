@@ -11,6 +11,7 @@ export function OutcomePanel({ v }: { v: InvestigationView }) {
   const verified = v.status === "PAUSE_VERIFIED";
   const approval = v.approvals[v.approvals.length - 1];
   const history = executionHistory(v.audit);
+  const lastAudit = v.audit[v.audit.length - 1];
   return (
     <section className={verified ? "outcome outcome-ok" : "outcome outcome-pending"} aria-labelledby="outcome-h">
       <h2 id="outcome-h">{verified ? "Campaign paused and verified" : d?.stillServing ? "Pause requested, still serving" : "Pause not confirmed"}</h2>
@@ -27,6 +28,12 @@ export function OutcomePanel({ v }: { v: InvestigationView }) {
         </dl>
       ) : <p>No readback could be completed: {d?.preWrite.reason ?? v.result.lastError?.message}</p>}
       {verified && <p className="outcome-foot">One campaign changed. It remains paused until a separate resume action.</p>}
+      {verified && lastAudit && (
+        <div className="receipt">
+          <p>Audit record #{lastAudit.seq}, hash <code className="hash" title={lastAudit.hash}>{lastAudit.hash.slice(0, 16)}…</code> (tamper-evident within this database).</p>
+          <button type="button" className="btn quiet" onClick={() => window.print()}>Print receipt</button>
+        </div>
+      )}
       {!verified && v.result.lastError && <p className="outcome-foot">{v.result.lastError.message}</p>}
       {history.length > 0 && (
         <details className="exec-history" open={!verified}>
