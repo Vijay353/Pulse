@@ -331,7 +331,8 @@ th { color: var(--ink-2); font-weight: 600; }
 .step-done .step-dot { background: var(--ok); border-color: var(--ok); }
 .step-current { color: var(--ink); font-weight: 700; }
 .step-current .step-dot { border-color: var(--ink); background: var(--ink); box-shadow: 0 0 0 3px var(--ticket), 0 0 0 4px var(--ink); }
-.step-not-reached { opacity: .55; text-decoration: line-through; text-decoration-color: var(--rule); }
+.step-not-reached { color: var(--ink-2); text-decoration: line-through; text-decoration-color: var(--ink-2); }
+.step-not-reached .step-dot { border-style: dashed; }
 .step-ending { font-weight: 700; font-size: 14px; padding: 3px 10px; border-radius: 999px; }
 .ending-success { background: var(--ok-tint); color: var(--ok); }
 .ending-stopped { background: var(--steel-2); color: var(--ink); }

@@ -87,7 +87,7 @@ export function SimulatorPanel({ sim, eventId, storeId, onChanged, onOpenInvesti
           {sim?.simulator === "NOT_CONFIGURED" && <p className="empty-state" role="status">Simulator controls are not available here: {sim.simulatorProblem}</p>}
           {sim && sim.campaigns.length === 0 && sim.simulator !== "NOT_CONFIGURED" && <p className="empty-state" role="status">Mock Uber Ads has no campaigns. Load a scenario or import a workbook in the data studio.</p>}
           {sim && sim.campaigns.length > 0 && (
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Table, scrolls sideways if needed">
               <table>
                 <caption>Campaigns as Mock Uber Ads reports them now ({sim.patchCount === null ? "PATCH count not available" : `${sim.patchCount} PATCH request${sim.patchCount === 1 ? "" : "s"} received`})</caption>
                 <thead><tr><th scope="col">Campaign</th><th scope="col">Configured</th><th scope="col">Effective</th><th scope="col">Version</th><th scope="col">Permissions</th></tr></thead>

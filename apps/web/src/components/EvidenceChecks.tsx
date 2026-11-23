@@ -14,7 +14,7 @@ export function EvidenceChecks({ matrix, defaultOpen = false }: { matrix: Eviden
     <details className="evidence-checks" open={defaultOpen || undefined}>
       <summary>{checksSummary(matrix)}</summary>
       <p className="muted small">Each row is a rule the system ran, with the records it used. "Not evaluated" means the check has not run, not that it passed.</p>
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Table, scrolls sideways if needed">
         <table>
           <thead><tr><th scope="col">Check</th><th scope="col">Result</th><th scope="col">Evidence used</th><th scope="col">Detail</th></tr></thead>
           <tbody>

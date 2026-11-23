@@ -24,7 +24,7 @@ export const Inspector = forwardRef<HTMLDetailsElement, { v: InvestigationView; 
         <Json value={v.event} />
 
         <h3>Policy checks</h3>
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table, scrolls sideways if needed">
           <table>
             <thead><tr><th scope="col">Check</th><th scope="col">Result</th><th scope="col">Observed</th><th scope="col">Required</th></tr></thead>
             <tbody>
@@ -47,7 +47,7 @@ export const Inspector = forwardRef<HTMLDetailsElement, { v: InvestigationView; 
         )}
 
         <h3>Contribution formula</h3>
-        {v.contribution && v.contribution.ok ? <pre className="json">{v.contribution.formula.join("\n")}{"\n\n"}{v.contribution.exclusions}</pre> : <p className="muted">Not calculated.</p>}
+        {v.contribution && v.contribution.ok ? <pre className="json" tabIndex={0}>{v.contribution.formula.join("\n")}{"\n\n"}{v.contribution.exclusions}</pre> : <p className="muted">Not calculated.</p>}
 
         <h3>Investigator output</h3>
         <p className="muted">{v.agent.provider ?? "none"}. Validation: schema {v.agent.validation?.schemaValid ? "valid" : "invalid"}, citations {v.agent.validation?.citationsResolve ? "resolve" : "do not resolve"}. {v.agent.validation?.problems.join("; ")}</p>

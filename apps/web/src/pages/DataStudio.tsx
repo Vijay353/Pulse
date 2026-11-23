@@ -104,7 +104,7 @@ export function DataStudio() {
 
         {preview && (
           <div className="preview">
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Table, scrolls sideways if needed">
               <table>
                 <caption>What would change ({preview.mode})</caption>
                 <thead><tr><th scope="col">Sheet</th><th scope="col">Added</th><th scope="col">Updated</th><th scope="col">Unchanged</th><th scope="col">Removed</th><th scope="col">Rejected</th></tr></thead>
@@ -113,7 +113,7 @@ export function DataStudio() {
             </div>
             {preview.changes.length > 0 && <details><summary>{preview.changes.length} record change{preview.changes.length === 1 ? "" : "s"}</summary><ul className="plain small">{preview.changes.map((c, i) => <li key={i}>{c.sheet} <code>{c.key}</code> {c.change}{c.detail ? ` (${c.detail})` : ""}</li>)}</ul></details>}
             {preview.errors.length > 0 && (
-              <div className="table-wrap">
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Table, scrolls sideways if needed">
                 <table className="errors">
                   <caption>Problems to fix</caption>
                   <thead><tr><th scope="col">Sheet</th><th scope="col">Row</th><th scope="col">Column</th><th scope="col">Problem</th></tr></thead>
@@ -133,7 +133,7 @@ export function DataStudio() {
       <section className="studio-block" aria-labelledby="hist-h">
         <h2 id="hist-h">Import history</h2>
         {history.length === 0 ? <p className="muted">No imports yet. Download the sample workbook to start.</p> : (
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table, scrolls sideways if needed">
             <table>
               <thead><tr><th scope="col">Batch</th><th scope="col">File</th><th scope="col">Mode</th><th scope="col">Status</th><th scope="col">By</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>{history.map((b) => <tr key={b.batch_id}><td><code>{b.batch_id}</code></td><td>{b.filename}</td><td>{b.mode}</td><td>{b.status.toLowerCase()}</td><td>{b.actor}</td><td>{b.status === "COMMITTED" && <button className="btn quiet small" onClick={() => restore(b.batch_id)} disabled={busy}>Restore previous data</button>}</td></tr>)}</tbody>
@@ -155,7 +155,7 @@ export function DataStudio() {
             {empty.kind === "no-match" && <button className="btn quiet small" onClick={() => setQ("")}>Clear search</button>}
           </div>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table, scrolls sideways if needed">
             <table className="records">
               <caption className="sr-only">{rows.length} of {total} {browse} records</caption>
               <thead><tr>{cols.map((c) => <th scope="col" key={c}>{c}</th>)}</tr></thead>
