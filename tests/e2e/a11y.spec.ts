@@ -58,6 +58,8 @@ test("keyboard: the confirm dialog traps focus and returns it to the opener", as
   await expect(page.getByRole("button", { name: "Simulate kitchen alert" })).toBeEnabled();
   await page.getByRole("button", { name: "Simulate kitchen alert" }).click();
   const opener = page.getByRole("button", { name: "Pause campaign" });
+  await expect(page.getByRole("heading", { name: "Recommendation ready" })).toBeVisible();
+  await expect(opener).toBeEnabled();
   await opener.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog");

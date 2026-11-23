@@ -11,14 +11,17 @@ import { EvidenceChecks } from "../components/EvidenceChecks";
 import { useAnalytics } from "../analytics/context";
 import { VerdictExplainer } from "../components/VerdictExplainer";
 import { Welcome } from "../components/Welcome";
+import { ShiftDigest } from "../components/ShiftDigest";
+import { FleetBar } from "../components/FleetBar";
+import { PitchPanel } from "../components/PitchPanel";
 import { readPref, writePref } from "../state/prefs";
 
-interface Props { user: string; store?: string; focusId?: string | null; onSwitchUser?: (userId: string, keepInvestigation: string | null) => void; adsProvider: string; investigator: string | null }
+interface Props { user: string; store?: string; myStores?: string[]; onChooseStore?: (store: string) => void; onScenarioLoaded?: () => void; pitch?: boolean; focusId?: string | null; onSwitchUser?: (userId: string, keepInvestigation: string | null) => void; adsProvider: string; investigator: string | null }
 
 /** Demo default store. CH-18 lets `?store=` choose another; the server enforces store scope either way. */
 export const DEFAULT_STORE = "SYN-STORE-104";
 
-export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchUser, store = DEFAULT_STORE }: Props) {
+export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchUser, store = DEFAULT_STORE, myStores = [], onChooseStore, onScenarioLoaded, pitch = false }: Props) {
   const [demoTools, setDemoTools] = useState(() => readPref("demoTools"));
   const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
   const [scenarioId, setScenarioId] = useState("A");
@@ -61,11 +64,13 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
       setScenarios(sc.scenarios);
       setScenarioId(sc.current ?? "A");
       setLoadedScenario(sc.current ?? "A");
-      const s = await refreshSim();
-      const target = focusId ?? s.latestInvestigation;
+      await refreshSim();
+      // CH-18: open this store's latest alert (the simulator's "latest" is global across stores).
+      const list = await api.get<{ investigations: { id: string; pos_store_id: string }[] }>("/api/investigations");
+      const target = focusId ?? list.investigations.find((i) => i.pos_store_id === store)?.id ?? null;
       if (target) await loadView(target);
     })().catch((e: Error) => setError(e.message)).finally(() => setBusy(null));
-  }, [refreshSim, loadView, focusId]);
+  }, [refreshSim, loadView, focusId, store]);
 
   /** Run an action, then re-read everything from the server. */
   const act = async (label: string, fn: () => Promise<void>, done?: (v: InvestigationView | null) => string) => {
@@ -92,6 +97,7 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
     currentId.current = null;
     setView(null);
     setLoadedScenario(scenarioId);
+    onScenarioLoaded?.();
   }, () => `Scenario ${scenarioId} loaded. Simulated clock reset.`);
 
   // V3 CH-21: event names only, no ids or values.
@@ -167,6 +173,8 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
 
   return (
     <div className="shift">
+      {pitch && <PitchPanel v={view} />}
+      {myStores.length > 1 && onChooseStore && <FleetBar stores={myStores} current={store} onChoose={onChooseStore} />}
       <section className="control-strip" aria-label="Demo controls">
         <div className="strip-row">
           <p className="strip-label">Demo<span className="sr-only"> controls, for trying the product with synthetic data</span></p>
@@ -266,6 +274,7 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
               {view.status === "PAUSE_VERIFIED" && <OutcomePanel v={view} />}
               <ActionCard v={view} busy={busy} canApprove={!view.viewer || view.viewer.canApproveHere} onPause={() => setConfirmOpen(true)} onKeep={() => setDismissOpen(true)} onRetry={retry} onCheck={checkAgain} onReassess={reassess} onOpenChild={(id) => loadView(id)} />
               {view.status !== "PAUSE_VERIFIED" && <OutcomePanel v={view} />}
+              {(view.status === "PAUSE_VERIFIED" || view.status === "DISMISSED") && <ShiftDigest v={view} store={view.store?.posStoreId ?? store} />}
               <h2 className="section-label">The evidence</h2>
               <div className="cards">
                 <KitchenCard v={view} />

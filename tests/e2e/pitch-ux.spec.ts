@@ -80,3 +80,34 @@ test("CH-12: the first-run welcome is shown once, dismissed with one click, and 
   await expect(page.getByRole("heading", { name: "No kitchen alerts yet" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "How MarginPulse works" })).toHaveCount(0);
 });
+
+test("CH-9: the shift digest appears once the alert is settled and shows counts only", async ({ page }) => {
+  await alert(page, "A");
+  await expect(page.getByRole("region", { name: "What happened on your shift" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Pause campaign" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Pause campaign" }).click();
+  const digest = page.getByRole("region", { name: "What happened on your shift" });
+  await expect(digest).toContainText("Paused Downtown Sponsored Listing with mgr-ana's approval");
+  await expect(digest).toContainText("1 alert checked, 1 pause verified");
+  await expect(digest).toContainText("1 change request sent");
+  await expect(digest).not.toContainText("$");
+});
+
+test("CH-18: on the Solo plan a two-store manager can switch stores and is told the fleet view is a Group feature", async ({ page }) => {
+  await page.goto("/?onboarding=0");
+  await page.getByLabel("Scenario").selectOption("T");
+  await page.getByRole("button", { name: "Load scenario" }).click();
+  await expect(page.getByRole("heading", { name: "No kitchen alerts yet" })).toBeVisible();
+  await page.getByLabel("Demo identity (not authentication)").selectOption("area-dee");
+  const fleet = page.getByRole("region", { name: "Your stores" });
+  await expect(fleet).toContainText("The fleet view is part of the Group plan");
+  await fleet.getByLabel("Store").selectOption("SYN-STORE-205");
+  await expect(page).toHaveURL(/[?&]store=SYN-STORE-205/);
+  await page.getByRole("button", { name: "Simulate kitchen alert" }).click();
+  await expect(page.getByText("Juniper Pizza — Uptown", { exact: false }).first()).toBeVisible();
+});
+
+test("CH-18: a single-store manager never sees the store switcher", async ({ page }) => {
+  await alert(page, "A");
+  await expect(page.getByRole("region", { name: "Your stores" })).toHaveCount(0);
+});
