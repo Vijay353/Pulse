@@ -12,6 +12,7 @@ import { auditFor, appendAudit, verifyChain } from "../audit/audit";
 import { buildEvidencePackage, serializePackage } from "../audit/evidencePackage";
 import { SCENARIOS } from "../../../../packages/fixtures/src/scenarios";
 import { currentPolicy } from "../agents/toolRegistry";
+import { createRateLimiter, RateLimiter } from "../security/rateLimit";
 
 export interface ApiDeps {
   db: Db;
@@ -50,14 +51,24 @@ export function sendError(reply: FastifyReply, e: unknown) {
   return reply.code(500).send({ error: "INTERNAL", message: "Unexpected error; see server log" });
 }
 
-export function registerApiRoutes(app: FastifyInstance, d: ApiDeps) {
-  const { db, clock, orchestrator } = d;
+/** CH-5: shared check for mutating routes. Throws a 429 HttpError with a truthful message. */
+export function enforceRateLimit(limiter: RateLimiter, reply: FastifyReply, key: string) {
+  const r = limiter.hit(key);
+  if (r.ok) return;
+  reply.header("retry-after", String(r.retryAfterSeconds));
+  throw new HttpError(429, "RATE_LIMITED", `Too many changes in a short time (limit ${limiter.limit} per minute). Wait ${r.retryAfterSeconds} seconds and try again. Nothing was changed by this request.`);
+}
 
-  const guarded = (handler: (req: FastifyRequest, reply: FastifyReply, actor: Actor) => Promise<unknown> | unknown, opts: { csrf?: boolean } = { csrf: true }) =>
+export function registerApiRoutes(app: FastifyInstance, d: ApiDeps & { limiter?: RateLimiter }) {
+  const { db, clock, orchestrator } = d;
+  const limiter = d.limiter ?? createRateLimiter({ limit: d.config.mutationRateLimitPerMin });
+
+  const guarded = (handler: (req: FastifyRequest, reply: FastifyReply, actor: Actor) => Promise<unknown> | unknown, opts: { csrf?: boolean; limited?: boolean } = { csrf: true }) =>
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         if (opts.csrf !== false) requireCsrf(req);
         const actor = resolveActor(db, req);
+        if (opts.limited) enforceRateLimit(limiter, reply, `${actor.userId}|${req.ip}`);
         return await handler(req, reply, actor);
       } catch (e) {
         return sendError(reply, e);
@@ -140,13 +151,14 @@ export function registerApiRoutes(app: FastifyInstance, d: ApiDeps) {
     }
   });
 
+  const LIMITED = { csrf: true, limited: true } as const;
   const ApproveBody = z.object({ acknowledgeWarnings: z.array(z.string().max(40)).max(5).optional() });
   app.post<{ Params: { id: string } }>("/api/investigations/:id/approve", guarded((req, _r, actor) => {
     const b = ApproveBody.safeParse(req.body ?? {});
     if (!b.success) throw new HttpError(400, "BAD_REQUEST", "acknowledgeWarnings must be a short list of warning codes");
     const a = orchestrator.approve((req.params as { id: string }).id, actor, b.data.acknowledgeWarnings ?? []);
     return { approvalId: a.approval_id, expiresAt: a.expires_at };
-  }));
+  }, LIMITED));
 
   const DismissBody = z.strictObject({ reason: z.string().trim().min(1).max(200) });
   app.post<{ Params: { id: string } }>("/api/investigations/:id/dismiss", guarded((req, _r, actor) => {
@@ -154,7 +166,7 @@ export function registerApiRoutes(app: FastifyInstance, d: ApiDeps) {
     if (!b.success) throw new HttpError(400, "REASON_REQUIRED", "A short reason is required");
     orchestrator.dismiss((req.params as { id: string }).id, actor, b.data.reason);
     return { ok: true };
-  }));
+  }, LIMITED));
 
   const PauseBody = z.strictObject({ approvalId: z.string().min(1).max(40) });
   app.post<{ Params: { id: string } }>("/api/investigations/:id/pause-campaign", guarded(async (req, _r, actor) => {
@@ -162,10 +174,10 @@ export function registerApiRoutes(app: FastifyInstance, d: ApiDeps) {
     if (!b.success) throw new HttpError(400, "APPROVAL_REQUIRED", "approvalId is required; approve first");
     const r = await orchestrator.pause((req.params as { id: string }).id, actor, b.data.approvalId);
     return { ok: true, ...r };
-  }));
+  }, LIMITED));
 
-  app.post<{ Params: { id: string } }>("/api/investigations/:id/verify", guarded(async (req, _r, actor) => orchestrator.verify((req.params as { id: string }).id, actor)));
-  app.post<{ Params: { id: string } }>("/api/investigations/:id/reassess", guarded(async (req, _r, actor) => ({ investigationId: await orchestrator.reassess((req.params as { id: string }).id, actor) })));
+  app.post<{ Params: { id: string } }>("/api/investigations/:id/verify", guarded(async (req, _r, actor) => orchestrator.verify((req.params as { id: string }).id, actor), LIMITED));
+  app.post<{ Params: { id: string } }>("/api/investigations/:id/reassess", guarded(async (req, _r, actor) => ({ investigationId: await orchestrator.reassess((req.params as { id: string }).id, actor) }), LIMITED));
 
   /* ---- policy + approval services (spec §15.3, §15.4) ---- */
   app.get<{ Params: { storeId: string } }>("/policies/:storeId/rush-control", async (req, reply) => {
@@ -177,7 +189,7 @@ export function registerApiRoutes(app: FastifyInstance, d: ApiDeps) {
     const b = z.strictObject({ investigationId: z.string(), acknowledgeWarnings: z.array(z.string().max(40)).max(5).optional() }).safeParse(req.body);
     if (!b.success) throw new HttpError(400, "BAD_REQUEST", "investigationId required");
     return orchestrator.approve(b.data.investigationId, actor, b.data.acknowledgeWarnings ?? []);
-  }));
+  }, LIMITED));
   app.get<{ Params: { approvalId: string } }>("/approvals/:approvalId", async (req, reply) => {
     const a = get(db, "SELECT * FROM mp_approvals WHERE approval_id = ?", req.params.approvalId);
     return a ?? reply.code(404).send({ error: "NOT_FOUND" });

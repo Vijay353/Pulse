@@ -27,6 +27,7 @@ import { Orchestrator } from "./orchestration/orchestrator";
 import { resetWorld } from "./orchestration/world";
 import { registerApiRoutes } from "./routes/api";
 import { registerDataRoutes } from "./routes/data";
+import { createRateLimiter } from "./security/rateLimit";
 
 export interface BuiltApp {
   app: FastifyInstance;
@@ -114,8 +115,10 @@ export function buildApp(opts: { config?: Partial<AppConfig>; env?: NodeJS.Proce
 
   registerMockUberAds(app, { db, clock });
   registerMockPos(app, { db, clock, secret: config.posWebhookSecret, webhookUrl: () => config.webhookUrl ?? `${selfBase}/api/events/kitchen-load` });
-  registerApiRoutes(app, { db, clock, config, orchestrator, ads, pos, simConsole, problems, investigatorName: investigator?.name ?? null });
-  registerDataRoutes(app, { db, clock });
+  // CH-5: one limiter shared by every mutating route (in-memory, this process only).
+  const limiter = createRateLimiter({ limit: config.mutationRateLimitPerMin });
+  registerApiRoutes(app, { db, clock, config, orchestrator, ads, pos, simConsole, problems, investigatorName: investigator?.name ?? null, limiter });
+  registerDataRoutes(app, { db, clock, limiter });
 
   const webDist = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../web/dist");
   if (config.serveWeb && existsSync(webDist)) {

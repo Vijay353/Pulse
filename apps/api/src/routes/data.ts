@@ -4,14 +4,16 @@ import type { Clock } from "../clock";
 import { ENTITY_NAMES, IMPORT_LIMITS, ImportMode, SHEETS, WORKBOOK_SCHEMA_VERSION } from "../imports/schema";
 import { commitBatch, createPreviewBatch, datasetFromDb, RawWorkbook, restoreBatch, validateWorkbook } from "../imports/importer";
 import { buildTemplate, buildWorkbook, parseCsv, parseXlsx, toCsv } from "../imports/xlsx";
-import { requireCsrf, resolveActor, sendError } from "./api";
+import { enforceRateLimit, requireCsrf, resolveActor, sendError } from "./api";
+import { createRateLimiter, RateLimiter } from "../security/rateLimit";
 import { appendAudit } from "../audit/audit";
 import { HttpError } from "../orchestration/orchestrator";
 
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-export function registerDataRoutes(app: FastifyInstance, d: { db: Db; clock: Clock }) {
+export function registerDataRoutes(app: FastifyInstance, d: { db: Db; clock: Clock; limiter?: RateLimiter }) {
   const { db, clock } = d;
+  const limiter = d.limiter ?? createRateLimiter({ limit: 0 });
 
   app.addContentTypeParser(["application/octet-stream", XLSX_TYPE, "text/csv"], { parseAs: "buffer", bodyLimit: IMPORT_LIMITS.maxBytes }, (_req, body, done) => done(null, body));
 
@@ -51,6 +53,7 @@ export function registerDataRoutes(app: FastifyInstance, d: { db: Db; clock: Clo
     try {
       requireCsrf(req);
       const actor = resolveActor(db, req);
+      enforceRateLimit(limiter, reply, `${actor.userId}|${req.ip}`);
       const body = req.body as Buffer;
       if (!Buffer.isBuffer(body) || body.length === 0) throw new HttpError(400, "EMPTY_FILE", "Upload an .xlsx or .csv file");
       if (body.length > IMPORT_LIMITS.maxBytes) throw new HttpError(413, "TOO_LARGE", "File exceeds the size limit");
@@ -79,6 +82,7 @@ export function registerDataRoutes(app: FastifyInstance, d: { db: Db; clock: Clo
     try {
       requireCsrf(req);
       const actor = resolveActor(db, req);
+      enforceRateLimit(limiter, reply, `${actor.userId}|${req.ip}`);
       const r = commitBatch(db, req.params.batchId, actor.userId, clock);
       if (!r.ok) return reply.code(r.status).send({ error: "COMMIT_REJECTED", message: r.message, errors: "errors" in r ? r.errors : undefined });
       appendAudit(db, clock, { investigationId: null, type: "IMPORT_COMMITTED", actor: actor.userId, payload: { batchId: req.params.batchId, counts: r.counts } });
@@ -92,6 +96,7 @@ export function registerDataRoutes(app: FastifyInstance, d: { db: Db; clock: Clo
     try {
       requireCsrf(req);
       const actor = resolveActor(db, req);
+      enforceRateLimit(limiter, reply, `${actor.userId}|${req.ip}`);
       const r = restoreBatch(db, req.params.batchId, actor.userId, clock);
       if (!r.ok) return reply.code(r.status).send({ error: "RESTORE_REJECTED", message: r.message });
       appendAudit(db, clock, { investigationId: null, type: "IMPORT_RESTORED", actor: actor.userId, payload: { batchId: req.params.batchId } });

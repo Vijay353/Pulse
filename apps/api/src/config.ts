@@ -33,6 +33,8 @@ export interface AppConfig {
   trustProxy: false | string;
   /** V3 CH-21: public Clarity project ID, read here only to allow Clarity's domains in the CSP. */
   clarityProjectId: string | null;
+  /** CH-5: mutating requests allowed per minute per demo identity + client address. 0 disables. */
+  mutationRateLimitPerMin: number;
 }
 
 const DEV_ADS_TOKEN = "local-mock-ads-token-not-a-secret";
@@ -71,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     },
     trustProxy: env.TRUST_PROXY ? env.TRUST_PROXY : false,
     clarityProjectId: env.VITE_CLARITY_PROJECT_ID || null,
+    mutationRateLimitPerMin: Number(env.MUTATION_RATE_LIMIT_PER_MIN ?? 60),
     ...overrides,
   };
 }
