@@ -186,11 +186,11 @@ export function ShiftView({ adsProvider, investigator, focusId = null, onSwitchU
             <button className="btn quiet" onClick={loadScenario} disabled={!!busy}>{busy === "load" ? "Loading…" : "Load scenario"}</button>
           </div>
           <button className="btn strong" onClick={simulateAlert} disabled={!!busy}>{busy === "emit" ? "Sending alert…" : "Simulate kitchen alert"}</button>
-          <p className="sim-clock">Simulated time <strong>{clock(sim?.clock)}</strong></p>
           <label className="toggle">
             <input type="checkbox" checked={demoTools} onChange={toggleDemoTools} />
             <span>Show demo tools</span>
           </label>
+          <p className="sim-clock">Simulated time <strong>{clock(sim?.clock)}</strong></p>
         </div>
       </section>
       {selected && selected.id !== loadedScenario && <p className="hint">Press <em>Load scenario</em> to reset the simulators to “{selected.title}”.</p>}

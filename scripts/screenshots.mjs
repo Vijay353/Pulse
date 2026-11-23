@@ -1,11 +1,16 @@
 import { chromium } from "@playwright/test";
 const out = process.argv[2];
-const b = await chromium.launch();
+// Optional: CHROME_PATH=/usr/bin/google-chrome where Playwright's own browser can't be downloaded; BASE to point at another port.
+const launchOpts = process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {};
+const BASE = process.env.BASE ?? "http://127.0.0.1:8787";
+const b = await chromium.launch(launchOpts);
 const p = await b.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = [];
 p.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
-await p.goto("http://127.0.0.1:8787/");
+await p.goto(`${BASE}/`);
+await p.getByLabel("Scenario").selectOption("A"); // the server keeps the last-loaded scenario; always start from A
 await p.getByRole("button", { name: "Load scenario" }).click();
+await p.getByRole("button", { name: "Simulate kitchen alert" }).waitFor();
 await p.waitForTimeout(300);
 await p.screenshot({ path: `${out}/0-empty.png` });
 await p.getByRole("button", { name: "Simulate kitchen alert" }).click();
@@ -22,9 +27,9 @@ console.log("console errors:", errors);
 await b.close();
 // Extra views: inspector open, blocked scenario, data studio with a rejected file.
 {
-  const b2 = await chromium.launch();
+  const b2 = await chromium.launch(launchOpts);
   const q = await b2.newPage({ viewport: { width: 1440, height: 1000 } });
-  await q.goto("http://127.0.0.1:8787/");
+  await q.goto(`${BASE}/`);
   await q.getByLabel("Scenario").selectOption("D");
   await q.getByRole("button", { name: "Load scenario" }).click();
   await q.getByRole("button", { name: "Simulate kitchen alert" }).click();
