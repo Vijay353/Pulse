@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import type { InvestigationView } from "../api/client";
 import { clock } from "../state/format";
 import { AuditVerify } from "./AuditVerify";
@@ -6,11 +7,11 @@ import { EvidenceExport } from "./EvidenceExport";
 const Json = ({ value }: { value: unknown }) => <pre className="json" tabIndex={0}>{JSON.stringify(value, null, 2)}</pre>;
 
 /** Technical evidence, collapsed by default. Every row here is read from persisted records. */
-export function Inspector({ v, adsProvider, investigator }: { v: InvestigationView; adsProvider: string; investigator: string | null }) {
+export const Inspector = forwardRef<HTMLDetailsElement, { v: InvestigationView; adsProvider: string; investigator: string | null }>(function Inspector({ v, adsProvider, investigator }, ref) {
   const d = v.result.tool?.detail;
   const lastAudit = v.audit[v.audit.length - 1];
   return (
-    <details className="inspector">
+    <details className="inspector" ref={ref}>
       <summary>Technical evidence <span className="muted">event, reads, agent output, formula, policy, approval, PATCH, readback, audit</span></summary>
       <div className="insp-body">
         <p className="muted">Providers: {adsProvider}; Mock POS/KDS (local simulator, mocked partner extension); investigator: {investigator ?? "unavailable"}.</p>
@@ -23,7 +24,7 @@ export function Inspector({ v, adsProvider, investigator }: { v: InvestigationVi
         <Json value={v.event} />
 
         <h3>Policy checks</h3>
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table, scrolls sideways if needed">
           <table>
             <thead><tr><th scope="col">Check</th><th scope="col">Result</th><th scope="col">Observed</th><th scope="col">Required</th></tr></thead>
             <tbody>
@@ -46,7 +47,7 @@ export function Inspector({ v, adsProvider, investigator }: { v: InvestigationVi
         )}
 
         <h3>Contribution formula</h3>
-        {v.contribution && v.contribution.ok ? <pre className="json">{v.contribution.formula.join("\n")}{"\n\n"}{v.contribution.exclusions}</pre> : <p className="muted">Not calculated.</p>}
+        {v.contribution && v.contribution.ok ? <pre className="json" tabIndex={0}>{v.contribution.formula.join("\n")}{"\n\n"}{v.contribution.exclusions}</pre> : <p className="muted">Not calculated.</p>}
 
         <h3>Investigator output</h3>
         <p className="muted">{v.agent.provider ?? "none"}. Validation: schema {v.agent.validation?.schemaValid ? "valid" : "invalid"}, citations {v.agent.validation?.citationsResolve ? "resolve" : "do not resolve"}. {v.agent.validation?.problems.join("; ")}</p>
@@ -58,7 +59,7 @@ export function Inspector({ v, adsProvider, investigator }: { v: InvestigationVi
         <h3>Evidence reads ({v.evidence.length})</h3>
         {v.evidence.length === 0 && <p className="muted">No evidence was read for this alert.</p>}
         {v.evidence.map((e) => (
-          <details key={e.evidenceId} className="ev">
+          <details key={e.evidenceId} id={`ev-${e.evidenceId}`} className="ev">
             <summary><code>{e.evidenceId}</code> {e.kind.toLowerCase().replace(/_/g, " ")} via {e.tool}</summary>
             <Json value={e.payload} />
           </details>
@@ -92,4 +93,4 @@ export function Inspector({ v, adsProvider, investigator }: { v: InvestigationVi
       </div>
     </details>
   );
-}
+});

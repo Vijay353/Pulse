@@ -1,7 +1,7 @@
 import type { InvestigationView } from "../api/client";
 import { CompareBar } from "./CompareBar";
 import { SourceBadge } from "./SourceBadge";
-import { adsBadge, posBadge } from "../state/badges";
+import { adsBadge, isSimulatedProvider, posBadge } from "../state/badges";
 import { age, clock, pct, provenanceLine, shortClock, statusWord, usd } from "../state/format";
 
 /** The memorable element: a ticket-time rail showing P95 against the merchant's limit. */
@@ -39,7 +39,7 @@ export function KitchenCard({ v }: { v: InvestigationView }) {
           <dl className="facts">
             <div><dt>Your limit</dt><dd>{k.thresholdMinutes === null ? "n/a" : `${k.thresholdMinutes} min`}</dd></div>
             <div><dt>Active tickets</dt><dd>{k.activeTickets}</dd></div>
-            <div><dt>Connector</dt><dd><SourceBadge badge={posBadge(k.connectorHealth)} /></dd></div>
+            <div><dt>Connector</dt><dd><SourceBadge badge={posBadge(k.connectorHealth, isSimulatedProvider(v.posProvider))} /></dd></div>
             <div><dt>Captured</dt><dd>{clock(k.capturedAt)}</dd></div>
           </dl>
         </>
@@ -62,10 +62,10 @@ export function CampaignCard({ v }: { v: InvestigationView }) {
         </>
       ) : (
         <>
-          <p className="card-source">Sponsored Listing, report through {v.report ? shortClock(v.report.watermark) : "n/a (no report)"}{v.report?.ageSecondsAtDecision != null ? ` (${age(v.report.ageSecondsAtDecision)} old)` : ""}</p>
+          <p className="card-source">{isSimulatedProvider(v.adsProvider) ? "Mock Uber Ads Sponsored Listing" : "Sponsored Listing"}, report through {v.report ? shortClock(v.report.watermark) : "n/a (no report)"}{v.report?.ageSecondsAtDecision != null ? ` (${age(v.report.ageSecondsAtDecision)} old)` : ""}</p>
           <p className="camp-name"><bdi>{c.name}</bdi></p>
           <p className="camp-state">
-            <SourceBadge badge={adsBadge(live, v.liveCampaignError)} />
+            <SourceBadge badge={adsBadge(live, v.liveCampaignError, isSimulatedProvider(v.adsProvider))} />
             <span className="muted"> v{live?.version ?? c.version}</span>
           </p>
           {ctr && ctr.ok ? (
@@ -107,22 +107,27 @@ export function ActionCard({ v, busy, canApprove = true, onPause, onKeep, onRetr
   return (
     <section className="card card-action" aria-labelledby="c3">
       <h2 id="c3" className="card-q">What you can do</h2>
-      <p className="card-source policy-provenance">{provenanceLine(v.policyProvenance)}</p>
       {a.canApprove || a.canPause ? (
-        <>
-          <p className="action-title">Pause one campaign</p>
-          <p className="muted">{c?.campaignId}</p>
-          <ul className="scope">
-            <li>Stops this campaign from serving</li>
-            <li>Does not change its budget</li>
-            <li>No promotion, menu, store, order or prep-time change</li>
-          </ul>
-          <p className="persist">Stays paused until someone resumes it</p>
-          <div className="btn-row">
-            <button className="btn primary" onClick={onPause} disabled={!!busy || !canApprove}>Pause campaign</button>
-            <button className="btn quiet" onClick={onKeep} disabled={!!busy}>Keep active</button>
+        <div className="decide">
+          <div className="decide-main">
+            <p className="action-title">Pause one campaign</p>
+            <p className="muted">{c?.name ? <bdi>{c.name}</bdi> : null} {c?.campaignId}</p>
+            <div className="btn-row">
+              <button className="btn primary big" onClick={onPause} disabled={!!busy || !canApprove}>Pause campaign</button>
+              <button className="btn quiet big" onClick={onKeep} disabled={!!busy}>Keep active</button>
+            </div>
+            <p className="authority"><strong>Who decides:</strong> {v.eligibleApprovers.length ? v.eligibleApprovers.map((e) => e.displayName).join(", ") : "a manager assigned to this store"}. MarginPulse never pauses on its own.</p>
           </div>
-        </>
+          <div className="decide-scope">
+            <p className="scope-h">What a pause does</p>
+            <ul className="scope">
+              <li>Stops this campaign from serving</li>
+              <li>Does not change its budget</li>
+              <li>No promotion, menu, store, order or prep-time change</li>
+            </ul>
+            <p className="persist">Stays paused until someone resumes it</p>
+          </div>
+        </div>
       ) : v.status === "PAUSE_VERIFIED" ? (
         <>
           <p className="action-title">Done</p>
@@ -145,6 +150,7 @@ export function ActionCard({ v, busy, canApprove = true, onPause, onKeep, onRetr
           {v.childIds.map((id) => <p key={id}><button className="linkish" onClick={() => onOpenChild(id)}>Open re-assessment {id}</button></p>)}
         </>
       )}
+      <p className="card-source policy-provenance">{provenanceLine(v.policyProvenance)}</p>
     </section>
   );
 }

@@ -1,5 +1,23 @@
 # Test report
 
+## Pitch-ready update (2026-11-22)
+
+Branch `improve/pitch-ready-ux`, baseline tag `pitch-baseline` (`067a907`). Node 22.23.5. Playwright 1.56.1 driving the system Google Chrome, because Playwright's own Chromium download is blocked in this sandbox (`launchOptions.executablePath` in an uncommitted local config; CI installs Chromium normally).
+
+| Command | Baseline (re-run 2026-11-22) | Final |
+|---|---|---|
+| `npm run typecheck` | exit 0 | exit 0 |
+| `npm run lint` | exit 0 | exit 0 |
+| `npm test` (Vitest) | **219 passed**, 28 files | **306 passed**, 35 files. All 219 still present; one assertion added to an existing file (scenario O), none changed. |
+| `npm run test:e2e` | **22 passed** | **39 passed** on three servers (normal, gate, pitch+group). Three consecutive runs, no flakes. |
+| `npm run scan:secrets` | no findings | 150 source files + 3 bundle files, no findings (it caught a literal access code in a README draft, fixed before commit) |
+| `npm run build` | exit 0 | exit 0 |
+| `npm audit --omit=dev` | — | 0 vulnerabilities |
+
+New suites: `unit/rate-limit`, `unit/copy-guard`, `unit/explain`, `integration/rate-limit`, `integration/explain`, `integration/insights`, `integration/notify`, `e2e/pitch-ux`, `e2e/a11y` (axe-core, WCAG 2.0/2.1/2.2 A+AA), `e2e/pitch-mode`.
+
+Two existing e2e tests were edited, both disclosed in their commits: scenario G now ticks *Show demo tools* before opening the simulator (the panel is hidden by default), and CH-19 asserts the evidence checks are already open for a blocked alert instead of clicking them open (blocked states now open their explanation automatically). Full detail: [PITCH-READY-CHANGE-REPORT.md](PITCH-READY-CHANGE-REPORT.md).
+
 ## V3 update (2026-11-09)
 
 Final counts after the V3 changes, from an actual run on the same sandbox (Node 22.22.0, Playwright 1.56.1 Chromium):

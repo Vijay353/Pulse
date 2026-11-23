@@ -4,6 +4,8 @@
  * the app still starts, but the health endpoint reports the problem and
  * investigations are BLOCKED instead of silently simulating success.
  */
+import { parsePlan, type Plan } from "../../../packages/contracts/src/plans";
+
 export type AdsMode = "SIMULATED" | "SANDBOX" | "LIVE";
 export type InvestigatorMode = "fixture" | "llm";
 
@@ -33,6 +35,17 @@ export interface AppConfig {
   trustProxy: false | string;
   /** V3 CH-21: public Clarity project ID, read here only to allow Clarity's domains in the CSP. */
   clarityProjectId: string | null;
+  /** CH-5: mutating requests allowed per minute per demo identity + client address. 0 disables. */
+  mutationRateLimitPerMin: number;
+  /** CH-17: commercial plan. Gates only surfaces added in this engagement. Invalid values fall back to "solo" and are reported. */
+  plan: Plan;
+  planSetting: string | null;
+  /** CH-20: "pitch" turns on the guided story panel and metrics strip. Anything else = normal. */
+  demoMode: "normal" | "pitch";
+  /** CH-19: outbound signed notifications. Off unless both URL and secret are set. */
+  notify: { url: string | null; secret: string | null; timeoutMs: number };
+  /** CH-19: base URL used for links inside notifications (for example the evidence package). */
+  publicBaseUrl: string | null;
 }
 
 const DEV_ADS_TOKEN = "local-mock-ads-token-not-a-secret";
@@ -71,6 +84,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     },
     trustProxy: env.TRUST_PROXY ? env.TRUST_PROXY : false,
     clarityProjectId: env.VITE_CLARITY_PROJECT_ID || null,
+    mutationRateLimitPerMin: Number(env.MUTATION_RATE_LIMIT_PER_MIN ?? 60),
+    plan: parsePlan(env.PLAN) ?? "solo",
+    planSetting: env.PLAN ?? null,
+    demoMode: env.DEMO_MODE === "pitch" ? "pitch" : "normal",
+    notify: { url: env.NOTIFY_WEBHOOK_URL || null, secret: env.NOTIFY_WEBHOOK_SECRET || null, timeoutMs: Number(env.NOTIFY_TIMEOUT_MS ?? 3000) },
+    publicBaseUrl: env.PUBLIC_BASE_URL || null,
     ...overrides,
   };
 }
@@ -121,3 +140,17 @@ export function accessProblems(c: AppConfig): string[] {
   if (!(c.access.ttlMinutes >= 5 && c.access.ttlMinutes <= 24 * 60)) p.push("ACCESS_SESSION_TTL_MINUTES must be between 5 and 1440");
   return p;
 }
+
+/**
+ * Optional-feature settings (CH-17, CH-19). Problems here never block
+ * investigations; they turn the optional feature off and are shown in health.
+ */
+export function optionalProblems(c: AppConfig): { component: string; problem: string }[] {
+  const p: { component: string; problem: string }[] = [];
+  if (c.planSetting !== null && parsePlan(c.planSetting) === null) p.push({ component: "plan", problem: `Unknown PLAN "${c.planSetting.slice(0, 20)}"; using solo. Use solo, group or enterprise.` });
+  if (c.notify.url && !c.notify.secret) p.push({ component: "notify", problem: "NOTIFY_WEBHOOK_URL is set but NOTIFY_WEBHOOK_SECRET is not; notifications are off (never sent unsigned)." });
+  if (c.notify.secret && c.notify.secret.length < 24) p.push({ component: "notify", problem: "NOTIFY_WEBHOOK_SECRET must be at least 24 characters; notifications are off." });
+  if (c.notify.url && !/^https?:\/\//.test(c.notify.url)) p.push({ component: "notify", problem: "NOTIFY_WEBHOOK_URL must start with http:// or https://; notifications are off." });
+  return p;
+}
+export const notifyEnabled = (c: AppConfig) => !!c.notify.url && !!c.notify.secret && !optionalProblems(c).some((p) => p.component === "notify");

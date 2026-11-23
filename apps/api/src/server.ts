@@ -12,7 +12,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AppConfig, configProblems, loadConfig, productionProblems } from "./config";
+import { AppConfig, configProblems, loadConfig, notifyEnabled, productionProblems } from "./config";
 import { assertWritableDataDir, isBootstrapped } from "./ops/storage";
 import { registerAccessGate } from "./security/accessGate";
 import { registerInternalOrigin } from "./security/internal";
@@ -27,6 +27,10 @@ import { Orchestrator } from "./orchestration/orchestrator";
 import { resetWorld } from "./orchestration/world";
 import { registerApiRoutes } from "./routes/api";
 import { registerDataRoutes } from "./routes/data";
+import { createRateLimiter } from "./security/rateLimit";
+import { registerInsightRoutes } from "./routes/insights";
+import { createNotifier, NOOP_NOTIFIER, Notifier } from "./notify/notify";
+import { buildInvestigationView } from "./orchestration/viewModel";
 
 export interface BuiltApp {
   app: FastifyInstance;
@@ -34,6 +38,8 @@ export interface BuiltApp {
   clock: Clock;
   config: AppConfig;
   orchestrator: Orchestrator;
+  /** CH-19: notifications on final states (no-op unless configured). */
+  notifier: Notifier;
   ads: UberAdsPort;
   pos: PosPort;
   baseUrl: () => string;
@@ -72,7 +78,14 @@ export function buildApp(opts: { config?: Partial<AppConfig>; env?: NodeJS.Proce
   else if (config.investigator === "llm" && (opts.modelProvider || !invProblem))
     investigator = new LlmInvestigator(opts.modelProvider ?? new AnthropicProvider({ apiKey: config.llm.apiKey!, model: config.llm.model!, baseUrl: config.llm.baseUrl }));
 
+  // CH-19: signed notifications on final states. A silent no-op unless configured.
+  const notifier: Notifier = notifyEnabled(config)
+    ? createNotifier({ db, clock, url: config.notify.url!, secret: config.notify.secret!, timeoutMs: config.notify.timeoutMs, publicBaseUrl: config.publicBaseUrl,
+        loadView: (id) => buildInvestigationView(db, clock, ads, pos, id) as Promise<Record<string, unknown> | null> })
+    : NOOP_NOTIFIER;
+
   const orchestrator = new Orchestrator({
+    onFinal: (id, status) => notifier.onFinal(id, status),
     db, clock, ads, pos, investigator,
     investigatorProblem: investigator ? null : invProblem?.problem ?? "investigator unavailable",
     webhookSecret: config.posWebhookSecret,
@@ -114,8 +127,11 @@ export function buildApp(opts: { config?: Partial<AppConfig>; env?: NodeJS.Proce
 
   registerMockUberAds(app, { db, clock });
   registerMockPos(app, { db, clock, secret: config.posWebhookSecret, webhookUrl: () => config.webhookUrl ?? `${selfBase}/api/events/kitchen-load` });
-  registerApiRoutes(app, { db, clock, config, orchestrator, ads, pos, simConsole, problems, investigatorName: investigator?.name ?? null });
-  registerDataRoutes(app, { db, clock });
+  // CH-5: one limiter shared by every mutating route (in-memory, this process only).
+  const limiter = createRateLimiter({ limit: config.mutationRateLimitPerMin });
+  registerApiRoutes(app, { db, clock, config, orchestrator, ads, pos, simConsole, problems, investigatorName: investigator?.name ?? null, limiter });
+  registerDataRoutes(app, { db, clock, limiter });
+  registerInsightRoutes(app, { db, config, ads, pos });
 
   const webDist = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../web/dist");
   if (config.serveWeb && existsSync(webDist)) {
@@ -126,7 +142,10 @@ export function buildApp(opts: { config?: Partial<AppConfig>; env?: NodeJS.Proce
     });
   }
 
-  return { app, db, clock, config, orchestrator, ads, pos, baseUrl, setBaseUrl: (u) => { selfBase = u; registerInternalOrigin(u); } };
+  // CH-19: let in-flight notifications finish (each has its own timeout) before shutdown completes.
+  app.addHook("onClose", async () => { await notifier.drain(); });
+
+  return { app, db, clock, config, orchestrator, ads, pos, notifier, baseUrl, setBaseUrl: (u) => { selfBase = u; registerInternalOrigin(u); } };
 }
 
 /** TRUST_PROXY: unset trusts nothing; "1" trusts one hop (the panel's proxy); otherwise an address or CIDR list. */

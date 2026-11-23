@@ -33,6 +33,16 @@ describe("decision outcomes", () => {
     expect(await t.api.patchCount()).toBe(0);
   });
 
+  it("O: ambiguous store mapping offers no approval, and a forced approval is refused", async () => {
+    const v = await assessed("O");
+    expect(v.decisionCode).toBe("NEEDS_REVIEW_STORE_MAPPING");
+    expect(v.campaign).toBeNull();
+    const forced = await t.api.post(`/api/investigations/${v.id}/approve`);
+    expect(forced.status).toBeGreaterThanOrEqual(400);
+    expect((await t.api.view(v.id)).approvals).toHaveLength(0);
+    expect(await t.api.patchCount()).toBe(0);
+  });
+
   it("B: event arrives (POS alert at 22) but MarginPulse re-checks the merchant limit (28)", async () => {
     const v = await assessed("B");
     expect(v.event.configuredThresholdMinutes).toBe(22);

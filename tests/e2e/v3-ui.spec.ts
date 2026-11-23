@@ -132,7 +132,8 @@ test("CH-19: evidence checks summary and table use words, and blocked checks are
   await alert(page, "C");
   const summary = page.locator("details.evidence-checks > summary");
   await expect(summary).toHaveText(/^Evidence checks: \d+ passed, 0 warned, 1 blocked, \d+ not evaluated$/);
-  await summary.click();
+  // CH-7: a blocked alert needs its explanation, so the checks open by themselves (no click needed).
+  await expect(page.locator("details.evidence-checks")).toHaveAttribute("open", "");
   const table = page.locator("details.evidence-checks table");
   await expect(table.getByRole("row", { name: /Blocked here/ })).toHaveCount(1);
   await expect(table.getByText("Not evaluated", { exact: true }).first()).toBeVisible();

@@ -71,3 +71,15 @@ export function provenanceLine(p: { policyId: string; version: string; effective
     : "Provenance unavailable: no author was recorded for this version.";
   return `Merchant policy ${p.policyId}-${p.version}, effective ${day}, runs ${p.checkCount} ordered checks. ${who}`;
 }
+
+/** CH-9: "1 min 20 sec" style durations for the digest. */
+export function duration(seconds: number | null | undefined) {
+  if (seconds === null || seconds === undefined) return "n/a";
+  if (seconds < 60) return `${seconds} sec`;
+  const m = Math.floor(seconds / 60), s = seconds % 60;
+  return s ? `${m} min ${s} sec` : `${m} min`;
+}
+export const rate = (bps: number | null | undefined) => (bps === null || bps === undefined ? "n/a" : `${Math.round(bps / 100)}%`);
+
+/** CH-9: plural-safe count phrase. */
+export const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

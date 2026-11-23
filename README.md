@@ -21,7 +21,7 @@ Open http://127.0.0.1:8787. The database is created at `data/marginpulse.db` and
 |---|---|
 | `npm start` | Build the React UI and serve everything on port 8787 |
 | `npm run dev` | API with watch + Vite dev server on http://127.0.0.1:5173 (proxied) |
-| `npm run reset -- A` | Reset the local DB to a scenario (A–R) |
+| `npm run reset -- A` | Reset the local DB to a scenario (A–T) |
 | `npm run template` | Regenerate the sample workbook and valid/invalid import fixtures in `data/templates/` |
 | `npm run typecheck` / `npm run lint` | TypeScript strict check / ESLint |
 | `npm test` | Unit + integration tests (Vitest, real HTTP against in-memory DB) |
@@ -31,15 +31,19 @@ Open http://127.0.0.1:8787. The database is created at `data/marginpulse.db` and
 
 ## Three-minute demo
 
+The screen is built in three layers. **What happened, why, and the one thing you can do** is at the top. **The evidence** (kitchen and campaign cards) sits below it. **Proof and details** (evidence checks, technical evidence) stays folded until you open it. Simulator controls are demo tools, hidden until you tick **Show demo tools**.
+
 1. **Load scenario A** and press **Simulate kitchen alert**. The mock POS builds a `KitchenLoadThresholdBreached` event from its latest KDS snapshot, signs it with HMAC and delivers it to the MarginPulse webhook over HTTP.
-2. Read the three cards: P95 34 min against a 28 min limit (the rail), the campaign with an estimated **$3.20** contribution per attributed order against a **$5.60** floor, and the one action on offer. Note the report watermark and *"Stays paused until someone resumes it"*.
-3. Open **Simulator controls** — the campaign table shows what Mock Uber Ads reports *right now* (ACTIVE, v12, 0 PATCH requests).
-4. Press **Pause campaign**, read the confirmation, confirm. The result panel shows configured **PAUSED**, effective **PAUSED**, version **13**, 1 PATCH, other mutations **None** — all from readback, not from the button press.
-5. Open **Technical evidence**: event, tool reads with evidence ids (`kds-snap-812`, `campaign-read-cmp-syn-4081-v12`, `calc-881`), investigator output and validation, policy checks, approval, redacted PATCH request, readbacks and the hash-chained audit timeline.
+2. Read the top of the page: *Recommendation ready*, then the reason in plain English, built only from checks that ran: "Kitchen prep time (P95) is 34 min, over your 28 min limit. This campaign's estimated contribution is 11.4% per attributed order ($3.20 against a $5.60 floor), below your 20% floor." The record chips (`kds-snap-812`, `calc-881`, …) jump to the evidence. Under it: **Pause campaign** / **Keep active**, and *Who decides*.
+3. Tick **Show demo tools** and open **Simulator controls**. The campaign table shows what Mock Uber Ads reports *right now* (ACTIVE, v12, 0 PATCH requests).
+4. Press **Pause campaign**, read the confirmation, confirm. The receipt shows configured **PAUSED**, effective **PAUSED**, version **13**, 1 PATCH, other mutations **None** (all from readback, not from the button press), the audit hash and **Print receipt**. *What happened on your shift* summarizes it, counts only.
+5. Open **Proof and details → Technical evidence**: event, tool reads with evidence ids (`kds-snap-812`, `campaign-read-cmp-syn-4081-v12`, `calc-881`), investigator output and validation, policy checks, approval, redacted PATCH request, readbacks and the hash-chained audit timeline.
 6. Try a failure: load **G**, simulate, then *Simulator → Another manager edits the campaign*, then Pause → **Blocked: campaign changed**, zero PATCHes; *Re-assess with fresh data* needs a new approval. Or **J** (paused but still serving → *Check again*), **I** (connection drops after apply → verified from readback, no retry), **M** (429 → truthful not-applied status → retry).
 7. **Data studio**: download the sample workbook, upload `data/templates/invalid/stale-revision.xlsx` (row-level rejection, commit disabled), then merge `data/templates/valid/merge-threshold-40.xlsx`, commit, go back and simulate again → **No action needed** because your edited policy now says 40 min.
 
-Full scenario list: `GET /api/scenarios` or the scenario picker (A to L from the spec, M to R adversarial extras, S opt-in repeat alert added in V3).
+Full scenario list: `GET /api/scenarios` or the scenario picker (A to L from the spec, M to R adversarial extras, S opt-in repeat alert added in V3, T opt-in franchise group with a two-store area manager).
+
+For an investor walkthrough, start with `DEMO_MODE=pitch PLAN=group npm start` and follow [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) (six minutes, offline).
 
 ## Operating modes
 
@@ -49,6 +53,15 @@ Full scenario list: `GET /api/scenarios` or the scenario picker (A to L from the
 | `INVESTIGATOR` | `fixture` | `llm` needs `ANTHROPIC_API_KEY` and `LLM_MODEL`; otherwise the health banner explains the problem and investigations are `BLOCKED_INVESTIGATOR_UNAVAILABLE`. |
 
 See [.env.example](.env.example) and [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+
+### Product and pitch settings
+
+| Setting | Default | Notes |
+|---|---|---|
+| `PLAN` | `solo` | `solo`, `group` or `enterprise` ([docs/PRICING.md](docs/PRICING.md)). Only surfaces added for packaging are gated, on the server: today that is the fleet view (Group and up). Approval, pause, evidence package, audit verify and data studio work on every plan. An unknown value falls back to `solo` and is reported in `/api/health`. |
+| `DEMO_MODE` | normal | `pitch` adds the Problem → Detection → Decision → Proof → Business story panel and a metrics strip read from the database. |
+| `NOTIFY_WEBHOOK_URL` / `NOTIFY_WEBHOOK_SECRET` | unset | Signed POST (`x-marginpulse-signature: sha256=<HMAC of the body>`) when an alert reaches a final state. Notification only: it cannot approve, pause or resume. Off unless both are set (secret ≥ 24 characters); every attempt is audited. `PUBLIC_BASE_URL` makes the evidence-package link absolute. |
+| `MUTATION_RATE_LIMIT_PER_MIN` | `60` | Approve, pause, verify, dismiss, re-assess and imports, per demo identity and client address, in this process only. `0` turns it off. |
 
 ### Hosted portfolio demo (V3 CH-20, CH-22)
 
@@ -67,13 +80,26 @@ Analytics (CH-21) lives in the app bundle, so it cannot run on the gate page. It
 
 The built JS bundle is behind the gate too. The gate page itself (HTML, CSS, a small script, fonts) is public and contains no project data.
 
+### Run it as one container
+
+```bash
+docker build -t marginpulse .
+read -rs -p "Choose a four-digit demo access code: " MP_PIN; echo
+docker run -d --name marginpulse -p 8787:8787 -v marginpulse-data:/data \
+  -e ACCESS_PIN="$MP_PIN" -e SESSION_SECRET="$(openssl rand -hex 32)" \
+  -e POS_WEBHOOK_SECRET="$(openssl rand -hex 24)" -e UBER_ADS_TOKEN="$(openssl rand -hex 24)" \
+  -e DEMO_MODE=pitch -e PLAN=group marginpulse
+```
+
+Then open http://localhost:8787 and enter the code you chose. The image runs in production mode: the visitor gate is on, the database lives on the `marginpulse-data` volume and is seeded once on first boot, and `/healthz` is the health check. Back up with `docker exec marginpulse node --import tsx scripts/backup.ts` (or copy the volume while the container is stopped). Full procedure, rollback and VPS notes: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The image has not been built in the authoring environment (no Docker daemon); the same production start was run as a plain process with the settings above.
+
 ## Repository map
 
 ```
 apps/api/src/        orchestrator, policy, approval, audit, adapters, tools, routes, Excel import
 apps/web/src/        React UI: shift view, dialogs, inspector, simulator panel, data studio
 packages/contracts/  Zod schemas shared by every boundary
-packages/fixtures/   synthetic seed dataset and scenarios A–R
+packages/fixtures/   synthetic seed dataset and scenarios A–T
 packages/mock-pos/   stateful POS/KDS simulator (signed webhook emitter)
 packages/mock-uber-ads/ stateful Uber Ads simulator (campaigns, PATCH, faults, ledger)
 data/templates/      sample workbook + valid/invalid import fixtures
@@ -91,6 +117,7 @@ docs/                architecture, contracts, integrations, decisions, status, t
 - [REQUIREMENTS-TRACEABILITY.md](docs/REQUIREMENTS-TRACEABILITY.md) · [IMPLEMENTATION-STATUS.md](docs/IMPLEMENTATION-STATUS.md) (spec's *limitations*) · [TEST-REPORT.md](docs/TEST-REPORT.md)
 - [V3-CHANGE-REPORT.md](docs/V3-CHANGE-REPORT.md): what changed in V3, evidence, limits and the demo walkthrough
 - [DEPLOYMENT.md](docs/DEPLOYMENT.md): single-VPS container, persistence, backups, rollback (V3 CH-22)
+- [PITCH-READY-CHANGE-REPORT.md](docs/PITCH-READY-CHANGE-REPORT.md): the product-clarity and SaaS-readiness changes, with evidence · [PRICING.md](docs/PRICING.md)
 - [DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) · [PORTFOLIO-CASE-STUDY.md](docs/PORTFOLIO-CASE-STUDY.md) · [INTERVIEW-GUIDE.md](docs/INTERVIEW-GUIDE.md)
 
 ## Troubleshooting

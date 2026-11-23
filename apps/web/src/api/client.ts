@@ -133,7 +133,25 @@ export interface InvestigationView {
   policyProvenance: { policyId: string; version: string; effectiveFrom: string; checkCount: number; changedBy: string | null; changedAt: string | null; changeSource: "POLICY_PUBLISHED" | "IMPORT" | null } | null;
   viewer: { userId: string; displayName: string; role: string; canApproveHere: boolean } | null;
   adsProvider: string;
+  posProvider?: string;
   audit: AuditEvent[];
 }
 
 export interface ScenarioInfo { id: string; code: string; title: string; summary: string; expected: string; steps: string[] }
+
+/** CH-9 / CH-20: read-only aggregate (apps/api/src/orchestration/digest.ts). */
+export interface Digest {
+  scope: { storeIds: string[] | "ALL"; since: "SCENARIO_LOADED"; scenario: string | null };
+  investigated: number; recommended: number; pausesVerified: number; pausesNotVerified: number;
+  keptActive: number; noAction: number; needsReview: number; blocked: number; open: number;
+  patchRequestsSent: number; verificationRateBps: number | null; nonActionRateBps: number | null;
+  meanSecondsToDecision: number | null; decisionsTimed: number;
+}
+/** CH-18: fleet summary for the stores an identity is assigned to. */
+export interface FleetStore {
+  storeId: string; name: string | null;
+  lastInvestigation: { id: string; status: string; decisionCode: string | null; createdAt: string } | null;
+  needsAttention: number;
+  campaign: { campaignId: string; configuredStatus: string; serving: string; version: number } | null;
+  campaignReadError: string | null;
+}
