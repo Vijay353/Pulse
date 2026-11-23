@@ -62,6 +62,11 @@ export const SCENARIOS: Scenario[] = [
   { id: "R", code: "pos-down", title: "POS connector unavailable", summary: "The POS returns 503 when MarginPulse re-reads the kitchen snapshot.", expected: "BLOCKED_POS_UNAVAILABLE.", steps: ["Simulate kitchen alert"],
     faults: [{ system: "pos", mode: "POS_UNAVAILABLE", remaining: 10 }] },
   { id: "S", code: "repeat-alert", title: "Same kitchen alert sent twice", summary: "Opt-in (V3 CH-6). Same data as A. The POS sends the same kitchen condition twice under two event ids.", expected: "The second investigation shows a possible repeat warning. Approving it requires an explicit confirmation; nothing is blocked or approved automatically.", steps: ["Simulate kitchen alert", "Simulate kitchen alert again", "Pause campaign → confirm the repeat check → Confirm"] },
+  { id: "T", code: "franchise-group", title: "Franchise group: one manager, two stores", summary: "Opt-in (CH-18). Same data as A, plus a synthetic area manager assigned to both Downtown and Uptown. With PLAN=group the fleet view lists both stores; each store's alerts and approvals stay store-scoped.", expected: "Fleet view lists two stores (Group plan). On Solo it explains that the fleet view is a Group feature. Store A flow is unchanged.", steps: ["Choose Dee Alvarez as the demo identity", "Open each store from the fleet view", "Simulate kitchen alert"],
+    overlay: (d) => {
+      d.users.push({ user_id: "area-dee", display_name: "Dee Alvarez (synthetic area manager, both stores)", role: "MANAGER" });
+      d.user_stores.push({ user_id: "area-dee", pos_store_id: "SYN-STORE-104" }, { user_id: "area-dee", pos_store_id: "SYN-STORE-205" });
+    } },
 ];
 
 export function scenarioDataset(s: Scenario): Dataset {

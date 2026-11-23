@@ -29,6 +29,8 @@ export interface OrchestratorDeps {
   webhookSecret: string;
   readbackAttempts: number;
   readbackIntervalMs: number;
+  /** CH-19: optional observer for final states (notifications). Must not throw or block. */
+  onFinal?: (investigationId: string, status: InvestigationStatus) => void;
 }
 
 export class HttpError extends Error {
@@ -68,6 +70,8 @@ export class Orchestrator {
     if (!TRANSITIONS[cur].includes(to)) throw new HttpError(409, "INVALID_TRANSITION", `Cannot move from ${cur} to ${to}`);
     run(this.d.db, "UPDATE mp_investigations SET status = ?, updated_at = ? WHERE id = ?", to, this.d.clock.nowIso(), id);
     appendAudit(this.d.db, this.d.clock, { investigationId: id, type: "STATE_CHANGED", actor, payload: { from: cur, to, ...extra } });
+    // CH-19: tell the notifier about final states, after the state and its audit entry are written. Read-only, fire-and-forget.
+    if (TRANSITIONS[to].length === 0) this.d.onFinal?.(id, to);
   }
 
   private setDecision(id: string, decision: string, code: string) {

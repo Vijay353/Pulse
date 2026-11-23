@@ -3,7 +3,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { all, Db, get, kvGet, run } from "../db/db";
 import type { Clock } from "../clock";
-import type { AppConfig } from "../config";
+import { type AppConfig, notifyEnabled, optionalProblems } from "../config";
 import { Actor, HttpError, Orchestrator } from "../orchestration/orchestrator";
 import type { PosPort, SimulatorConsolePort, UberAdsPort } from "../adapters/ports";
 import { buildInvestigationView } from "../orchestration/viewModel";
@@ -89,6 +89,11 @@ export function registerApiRoutes(app: FastifyInstance, d: ApiDeps & { limiter?:
     // same project ID baked in at build time; if configured is true here but the
     // footer shows no analytics notice, rebuild with the build variable set.
     clarity: { configured: d.config.clarityProjectId !== null },
+    // CH-17 / CH-19 / CH-20: optional features. Problems here never block investigations.
+    plan: d.config.plan,
+    demoMode: d.config.demoMode,
+    notifications: { enabled: notifyEnabled(d.config) },
+    optionalProblems: optionalProblems(d.config),
   }));
 
   app.get("/api/session", async (req, reply) => {
